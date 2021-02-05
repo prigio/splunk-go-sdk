@@ -63,11 +63,10 @@ func (mis *ModInputScheme) PrintXMLScheme() ([]byte, error) {
 	//mis.streamingMode = "xml"
 }
 
-
-// ExampleConf returns a string containing a sample configuration 
+// ExampleConf returns a string containing a sample configuration
 // for the modular input based on its definition
 // this can help an user test a configuration within splunk's inputs.conf
-func (mis *ModInputScheme) ExampleConf() (string) {
+func (mis *ModInputScheme) ExampleConf() string {
 	var sb strings.Builder
 	fmt.Fprint(sb, "# Example configs for inputs.conf\n")
 	fmt.Fprintf(sb, "# %s\n", mis.Description)
@@ -81,7 +80,7 @@ func (mis *ModInputScheme) ExampleConf() (string) {
 	fmt.Fprint(sb, "sourcetype = <sourcetype>\n")
 	fmt.Fprint(sb, "interval = <cron schedule>\n")
 	return sb.String()
-
+}
 
 // Parameters used by the ModularInput.
 type ModInputArg struct {
