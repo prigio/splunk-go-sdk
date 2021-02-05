@@ -72,7 +72,7 @@ func (mis *ModInputScheme) ExampleConf() string {
 	fmt.Fprintf(&sb, "# %s\n", mis.Description)
 	fmt.Fprintf(&sb, "[%s://name-of-input]\n", mis.StanzaName)
 	for _, arg := range mis.Args {
-		fmt.Fprintf(&sb, "# %s - %s\n", arg.title, arg.Description)
+		fmt.Fprintf(&sb, "# %s - %s\n", arg.Title, arg.Description)
 		fmt.Fprintf(&sb, "%s = <%s>\n", arg.Name, arg.DataType)
 	}
 	fmt.Fprint(&sb, "# Standard input configurations\n")
