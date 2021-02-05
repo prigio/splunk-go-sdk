@@ -68,17 +68,17 @@ func (mis *ModInputScheme) PrintXMLScheme() ([]byte, error) {
 // this can help an user test a configuration within splunk's inputs.conf
 func (mis *ModInputScheme) ExampleConf() string {
 	var sb strings.Builder
-	fmt.Fprint(sb, "# Example configs for inputs.conf\n")
-	fmt.Fprintf(sb, "# %s\n", mis.Description)
-	fmt.Fprintf(sb, "[%s://name-of-input]\n", mis.StanzaName)
+	fmt.Fprint(&sb, "# Example configs for inputs.conf\n")
+	fmt.Fprintf(&sb, "# %s\n", mis.Description)
+	fmt.Fprintf(&sb, "[%s://name-of-input]\n", mis.StanzaName)
 	for _, arg := range mis.Args {
-		fmt.Fprintf(sb, "# %s - %s\n", arg.title, arg.Description)
-		fmt.Fprintf(sb, "%s = <%s>\n", arg.Name, arg.DataType)
+		fmt.Fprintf(&sb, "# %s - %s\n", arg.title, arg.Description)
+		fmt.Fprintf(&sb, "%s = <%s>\n", arg.Name, arg.DataType)
 	}
-	fmt.Fprint(sb, "# Standard input configurations\n")
-	fmt.Fprint(sb, "index = <index>\n")
-	fmt.Fprint(sb, "sourcetype = <sourcetype>\n")
-	fmt.Fprint(sb, "interval = <cron schedule>\n")
+	fmt.Fprint(&sb, "# Standard input configurations\n")
+	fmt.Fprint(&sb, "index = <index>\n")
+	fmt.Fprint(&sb, "sourcetype = <sourcetype>\n")
+	fmt.Fprint(&sb, "interval = <cron schedule>\n")
 	return sb.String()
 }
 
