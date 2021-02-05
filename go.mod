@@ -1,3 +1,3 @@
 module git.cocus.com/bigdata/splunk-go
 
-go 1.15
+go 1.16

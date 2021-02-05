@@ -18,5 +18,6 @@ default: build
 
 
 build:
-	docker build --target bin --output bin/ --platform local .
+	BUILDPLATFORM=darwin
+	docker build --target bin --output bin/ --platform linux .
 

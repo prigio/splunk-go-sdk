@@ -1,27 +1,27 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"time"
 
-	"./splunk/modinputs"
+	"git.cocus.com/bigdata/splunk-go/modinputs"
 )
 
 func streamEvents(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {
 	time.Sleep(1 * time.Second)
-	mi.Log("INFO", "This is my custom internal logging")
+	mi.Log("INFO", "'Hello' modular input internal logging")
 	ev := mi.NewDefaultEvent(stanza)
 	ev.Time = modinputs.GetEpochNow()
-	ev.Data = "TEST DATA ADDED BY STREAM_EVENTS"
+	ev.Data = "Hello " + stanza.GetParam("text")
 	mi.WriteToSplunk(ev)
-	return fmt.Errorf("TEST ERRROR")
+	return nil // fmt.Errorf("TEST ERRROR")
 }
 
+/*
 func validate(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {
 	return fmt.Errorf("VALIDATION ERROR")
 }
-
+*/
 func main() {
 	// Prepare the script
 	script := &modinputs.ModularInput{}
@@ -32,7 +32,7 @@ func main() {
 	script.UseSingleInstance = true
 	script.Debug = false
 	script.Stream = streamEvents
-	script.Validate = validate
+	script.Validate = nil
 
 	argText := &modinputs.ModInputArg{
 		Name:             "text",
@@ -45,7 +45,7 @@ func main() {
 		//		CustomValidation: "",
 		//		CustomValidationErrMessage: "",
 	}
-	argText.SetValidation(modinputs.ArgValidationIsPort)
+	// argText.SetValidation(modinputs.ArgValidationIsPort)
 	script.AddArgument(argText)
 
 	err := script.Run()
