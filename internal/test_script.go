@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"./modinputs"
 	"time"
+
+	"./modinputs"
 )
 
 func main() {
 
-	se := &modinputs.SplunkEvent{}	
+	se := &modinputs.SplunkEvent{}
 
 	se.Data = `action="value"`
 	se.Time = float64(time.Now().UnixNano()) / 1000000000.0
@@ -21,7 +22,7 @@ func main() {
 	se.Unbroken = true
 
 	xml, err := se.XML()
-	if err != nil  {
+	if err != nil {
 		fmt.Errorf(err.Error())
 	}
 	fmt.Println(string(xml))
@@ -47,7 +48,6 @@ func main() {
 	</configuration>
   </input>`
 
- 
 	script := &modinputs.ModularInput{}
 	script.Title = "Test script"
 	script.Description = "Whatever"
@@ -55,15 +55,14 @@ func main() {
 	script.UseExternalValidation = true
 	script.UseSingleInstance = false
 	script.Args = []modinputs.ModInputArg{
-		{"Arg1","Name of Arg1","Desc of arg1", modinputs.ArgDataTypeStr, true, false, "", "", ""},
-		{"Arg2","Name of Arg2","Desc of arg2", modinputs.ArgDataTypeStr, true, false, "", "", ""},
+		{"Arg1", "Name of Arg1", "Desc of arg1", modinputs.ArgDataTypeStr, true, false, "", "", ""},
+		{"Arg2", "Name of Arg2", "Desc of arg2", modinputs.ArgDataTypeStr, true, false, "", "", ""},
 	}
 	if scheme, err := script.XMLScheme(); err != nil {
 		fmt.Println(err.Error())
 	} else {
 		fmt.Println(string(scheme))
 	}
-	
 
 	if xerr := script.ParseConfig([]byte(s)); xerr != nil {
 		fmt.Println(xerr.Error())
@@ -74,8 +73,7 @@ func main() {
 			for _, param := range stanza.Params {
 				fmt.Printf("Name:%s, val:%s\n", param.Name, param.Value)
 			}
-		  }
+		}
 	}
-  
-  
+
 }

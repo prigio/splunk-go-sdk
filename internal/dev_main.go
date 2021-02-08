@@ -7,7 +7,6 @@ import (
 )
 
 func main() {
-
 	se := &modinputs.SplunkEvent{}	
 
 	se.Data = `action="value"`

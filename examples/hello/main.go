@@ -27,7 +27,7 @@ func main() {
 	script := &modinputs.ModularInput{}
 	script.Title = "Hello world input"
 	script.Description = "This is a sample description for the test input"
-	script.StantaName = "hello"
+	script.StanzaName = "hello"
 	script.UseExternalValidation = false
 	script.UseSingleInstance = true
 	script.Debug = false

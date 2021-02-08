@@ -1,8 +1,5 @@
 module hello
 
+go 1.15
 
-go 1.16
-
-require (
-	"git.cocus.com/bigdata/splunk-go/modinputs"
-)
+require git.cocus.com/bigdata/splunk-go v0

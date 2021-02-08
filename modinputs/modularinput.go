@@ -106,8 +106,18 @@ func (mi *ModularInput) Run() (err error) {
 			return err
 		}
 		return mi.runValidation()
+	} else if os.Args[1] == "--example-config" {
+		// This is not part of the standard spluk interface, but it is useful for users to print-out the expected splunk configurations
+		fmt.Println(mi.ExampleConf())
+		return nil
 	} else if os.Args[1] == "-?" || os.Args[1] == "-h" || len(os.Args) >= 2 {
-		fmt.Printf("Usage: %s [--scheme|--validate-arguments]\n\tProvide configurations on STDIN using the XML format specified at:\n\thttps://docs.splunk.com/Documentation/SplunkCloud/8.1.2011/AdvancedDev/ModInputsScripts#Read_XML_configuration_from_splunkd \n\tDo not provide any command-line parameters in order to start the data streaming.\n", path.Base(os.Args[0]))
+		fmt.Printf(`Usage: %s [--scheme|--validate-arguments|--example-config]
+- invoked with no command-line parameters, start the data streaming. Provide configurations on STDIN using the XML format specified at:
+		https://docs.splunk.com/Documentation/SplunkCloud/8.1.2011/AdvancedDev/ModInputsScripts#Read_XML_configuration_from_splunkd
+- --scheme: prints out the XML scheme definition. See Splunk documentation
+- --validate-arguments: validate the parameters provided on STDIN in XML format. See Splunk documentation
+- --example-config: Print an example of inputs.conf configuration for this modular input and exit.
+`, path.Base(os.Args[0]))
 		return nil
 	}
 

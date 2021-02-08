@@ -1,8 +1,10 @@
 #Environment settings for cross compilation
 #Ref: https://www.digitalocean.com/community/tutorials/how-to-build-go-executables-for-multiple-platforms-on-ubuntu-16-04
-ENV_OSX=-e GOOS=darwin -e GOARCH=amd64
-ENV_WIN=-e GOOS=windows -e GOARCH=amd64
-ENV_LIN=-e GOOS=linux -e GOARCH=amd64
+
+
+ENV_OSX=--build-arg GOOS=darwin --build-arg GOARCH=amd64
+#ENV_WIN=--build-arg GOOS=windows --build-arg GOARCH=amd64
+ENV_LIN=--build-arg GOOS=linux --build-arg GOARCH=amd64
 #this is there the src files are located, within the container
 #the name of the directory might be used by GO for the name of the executable
 #this is where build files are to be stored, within the container
@@ -15,9 +17,8 @@ ENV_LIN=-e GOOS=linux -e GOARCH=amd64
 default: build
 
 
-
-
 build:
-	BUILDPLATFORM=darwin
-	docker build --target bin --output bin/ --platform linux .
+	#docker build --target bin-unix --output bin --platform linux ${ENV_LIN}  .
+	docker build --output "type=local,dest=bin" --platform linux ${ENV_LIN} .
+	#docker build -t tst --target bin-unix --platform linux ${ENV_LIN}  .
 
