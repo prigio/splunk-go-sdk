@@ -50,7 +50,7 @@ func (mis *ModInputScheme) PrintXMLScheme() ([]byte, error) {
 		UseSingleInstance     bool     `xml:"use_single_instance"`
 		//Adding a fixed StreamingMode, not present within the original structure
 		StreamingMode string        `xml:"streaming_mode"`
-		Args          []ModInputArg `xml:"endpoint>args"`
+		Args          []ModInputArg `xml:"endpoint>args>arg"`
 	}{
 		Title:                 mis.Title,
 		Description:           mis.Description,
