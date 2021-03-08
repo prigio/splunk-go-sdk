@@ -73,16 +73,15 @@ func (mi *ModularInput) WriteToSplunk(se *SplunkEvent) (cnt int, err error) {
 func (mi *ModularInput) loadConfigFromStdin() (err error) {
 	var n int64
 	buf := new(bytes.Buffer)
-	n, err = buf.ReadFrom(os.Stdin)
-	if err != nil {
+	if n, err = buf.ReadFrom(os.Stdin); err != nil {
 		mi.Log("FATAL", "Error while reading from stdin. "+err.Error())
 		return err
+	} else {
+		mi.Log("DEBUG", fmt.Sprintf("Read from Stdin %d bytes\n", n))
 	}
 
-	mi.Log("DEBUG", fmt.Sprintf("Read from Stdin %d bytes\n", n))
 	mi.Log("DEBUG", "Parsing XML config")
-
-	if mi.ParseConfig(buf.Bytes()) != nil {
+	if err := mi.ParseConfig(buf.Bytes()); err != nil {
 		mi.Log("FATAL", "Error while parsing stdin. "+err.Error())
 		return err
 	}
