@@ -15,9 +15,9 @@ type ValidationFunc func(*ModularInput, *Stanza) error
 // ModularInput is the main structure defining how a modular input looks like.
 // Through composition, configuration and scheme elements are assembled within it
 type ModularInput struct {
-	ModInputConfig // Unnamed sub-structs: their fields get imported directly within ModularInput
+	ModInputConfig // Unnamed sub-structs: their fields and methods get imported directly within ModularInput
 	ModInputScheme
-	Debug bool // This debug setting is meant for facilityting development and is not configurable by a user through splunk's inputs.conf
+	Debug bool // This debug setting is meant for facilitating development and is not configurable by a user through splunk's inputs.conf
 	// private variables
 	internalLogEvent               *SplunkEvent //this is used to setup a standardized event using for logging to index=_internal. If this is not nil, internal loggin is performed through SplunkEvents written on Stdout instead of plain output on Stderr
 	cntDataEventsGeneratedbyStanza int64        // counter of data events emitted by the stanza being currently processed (internal loggin is excluded)
@@ -83,6 +83,7 @@ func (mi *ModularInput) loadConfigFromStdin() (err error) {
 	mi.Log("DEBUG", "Parsing XML config")
 
 	if mi.ParseConfig(buf.Bytes()) != nil {
+		mi.Log("FATAL", "Error while parsing stdin. "+err.Error())
 		return err
 	}
 	return nil
@@ -91,13 +92,13 @@ func (mi *ModularInput) loadConfigFromStdin() (err error) {
 // Run is the main function that you, as a modular input script developer must invoke to start the actual processing.
 func (mi *ModularInput) Run() (err error) {
 	mi.Log("DEBUG", fmt.Sprintf("ModularInput.Run started. Cmd-line parameters: '%s'", strings.Join(os.Args, " ")))
-
 	if len(os.Args) == 1 {
 		// Read XML configs
 		// Populates infos about the configuration Stanzas
-		if err = mi.loadConfigFromStdin(); err == nil {
-			return mi.runStreaming()
+		if err = mi.loadConfigFromStdin(); err != nil {
+			return err
 		}
+		return mi.runStreaming()
 	} else if os.Args[1] == "--scheme" {
 		return mi.runScheme()
 	} else if os.Args[1] == "--validate-arguments" {
