@@ -5,16 +5,8 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
+	"time"
 )
-
-// NewSplunkEventFromDefaults returns a new SplunkEvent with the Done and Unbroken fields pre-initialized
-// to a sensible standard (events are "broken", done is false)
-func NewSplunkEventFromDefaults() *SplunkEvent {
-	se := &SplunkEvent{}
-	se.Unbroken = false
-	se.Done = false
-	return se
-}
 
 // SplunkEvent is structure used to feed log data to splunk using the XML streaming mode.
 // See: https://docs.splunk.com/Documentation/Splunk/8.1.1/AdvancedDev/ModInputsStream
@@ -30,11 +22,31 @@ type SplunkEvent struct {
 	Done       bool // the last of a series of unbroken events uses <done/> to signalize the event is now complete
 }
 
+// NewSplunkEventFromDefaults returns a new SplunkEvent with the Done and Unbroken fields pre-initialized
+// to a sensible standard (events are "broken", done is false)
+func NewSplunkEventFromDefaults() *SplunkEvent {
+	se := &SplunkEvent{}
+	se.Unbroken = false
+	se.Done = false
+	return se
+}
+
 // writeOut is a private function which allows the modular input to skip counting the events emitted.
 // useful for internal logging, which is not counter.
 func (se *SplunkEvent) writeOut() (cnt int, err error) {
 	var b []byte
 	if b, err = se.xml(); err != nil {
+		return -1, err
+	}
+	cnt, err = os.Stdout.Write(b)
+	return cnt, err
+}
+
+// writeOutPlain is a private function which allows the modular input to skip counting the events emitted.
+// useful for internal logging, which is not counted.
+func (se *SplunkEvent) writeOutPlain(prependTime bool) (cnt int, err error) {
+	var b []byte
+	if b, err = se.string(prependTime); err != nil {
 		return -1, err
 	}
 	cnt, err = os.Stdout.Write(b)
@@ -90,5 +102,24 @@ func (se *SplunkEvent) xml() ([]byte, error) {
 	}
 
 	buf.WriteString("</event>\n")
+	return buf.Bytes(), nil
+}
+
+// string generates a plain-text representation of the SplunkEvent.
+//    See https://docs.splunk.com/Documentation/Splunk/8.1.1/AdvancedDev/ModInputsStream
+func (se *SplunkEvent) string(prependTime bool) ([]byte, error) {
+	// It would be easy to use xml.Marshal, but tests revelaed it takes 30% time to generate events than this method
+	// for the xml needed to generate the Scheme it is not important, as that is only done once per execution.
+	// But the events logging is much more time-critical.
+	if se.Data == "" {
+		return nil, fmt.Errorf("Events must have at least the data field set to be written out.")
+	}
+	buf := new(bytes.Buffer)
+	if prependTime && se.Time > 0 {
+		buf.WriteString(time.Unix(0, int64(se.Time*1000000000.0)).Format(time.RFC3339))
+		buf.WriteString(" - ")
+	}
+	buf.WriteString(se.Data)
+
 	return buf.Bytes(), nil
 }
