@@ -1,5 +1,7 @@
-module hello
+module example
 
 go 1.15
 
-require git.cocus.com/bigdata/splunk-go v0
+replace git.cocus.com/bigdata/splunk-go-sdk => ../../
+
+require git.cocus.com/bigdata/splunk-go-sdk v1.0.0

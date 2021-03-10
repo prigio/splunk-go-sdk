@@ -4,7 +4,7 @@ import (
 	"os"
 	"time"
 
-	"git.cocus.com/bigdata/splunk-go/modinputs"
+	"git.cocus.com/bigdata/splunk-go-sdk/modinputs"
 )
 
 func streamEvents(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {
