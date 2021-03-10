@@ -13,87 +13,47 @@ This repository provides:
 - a custom alerts framework - if needs arises. 
 
 
+## Documentation
+For detailed documentation, refer to: 
+
+- Modular inputs: [modular inputs libray](modinputs/README.md).
+
 ## Usage
-### Prepare build pipeline
-Import this repository within your golang code
 
-filename.go: 
-
-```
-import (
-	"git.cocus.com/bigdata/splunk-go/modinputs"
-    // if needed
-    "git.cocus.com/bigdata/splunk-go/client"
-)
-```
-
+### Download library
 Note, as this is a PRIVATE repository, you need to:
 
 1. Get a build token from the team managing this repository. 
     The token is configured within git.cocus.com. 
 2. Configure your build pipeline to use that token when downloading the library.
-    Create a file `~/.netrc` with this content
+    Create a file `~/.netrc` with this content:
 
     ```
         machine git.cocus.com login go-build password <build-token>
     ```
+	This file will be read from the _go_ utilities to get access to the repository.
 3. Configure your build pipeline with the following environment variable:
     `    GOPRIVATE=git.cocus.com/*`
-4. Test your build pipeline. You can manually execute `go get git.cocus.com/bigdata/splunk-go/modinputs` and see if it worked.
+4. Test your build pipeline: manually execute the following command and check its results
+    `    go get git.cocus.com/bigdata/splunk-go-sdk/modinputs`
 
-### Use the library
+### Import in code
+Within your _go_ source files, import the libraries:
 
-#### modinputs
-
-Within your main go code: `main()`: 
-
-```go
-func main() {
-	// Create an instance of the modinputs.ModularInput Struct
-	script := &modinputs.ModularInput{}
-    // name of the input type, appearing on Splunk UI
-    script.Title = "Hello world input"
-	script.Description = "This is a sample description for the test input"
-	// !lowercase! name of the stanza used within splunk's inputs.conf
-    script.StanzaName = "hello"
-    script.Debug = false
-    // see Splunk documentation for these
-    script.UseExternalValidation = false
-	script.UseSingleInstance = true
-    
-    // these two functions are responsible to
-    // validate the inputs received by Splunk 
-    // (only needed if script.UseExternalValidation=true)
-    script.Validate = nil
-    // actually generate the data that needs to be read by splunk
-	script.Stream = streamEvents
-
-    // define the expected arguments
-	argText := &modinputs.ModInputArg{
-		Name:             "text",
-		Title:            "Text to input",
-		Description:      "Description of text input",
-		DataType:         modinputs.ArgDataTypeStr,
-		RequiredOnCreate: true,
-		RequiredOnEdit:   true,
-		//		Validation: "",
-		//		CustomValidation: "",
-		//		CustomValidationErrMessage: "",
-	}
-    // argText.SetValidation(modinputs.ArgValidationIsPort)
-    // add argument to script
-	script.AddArgument(argText)
-
-    // start the script!
-	err := script.Run()
-	if err != nil {
-		// this will NOT run deferred function, so in case we have any, need to take care about that. Simply: do NOT use such functions within the main() ;-)
-		os.Exit(1)
-	}
-	return
-}
 ```
+// somesource.go
+package somepackage
 
+import (
+	// ... some other imports
+
+	"git.cocus.com/bigdata/splunk-go-sdk/modinputs"
+    // if needed
+    // "git.cocus.com/bigdata/splunk-go/client"
+)
+// ... your code
+
+```
 
 ## Various resources
 These are links for future reference, but not directly relevant to this library.
