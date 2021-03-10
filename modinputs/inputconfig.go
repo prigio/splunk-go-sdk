@@ -1,8 +1,10 @@
 package modinputs
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -33,10 +35,29 @@ In some cases, there might be NO <stanza> elements
 type ModInputConfig struct {
 	XMLName       xml.Name `xml:"input"`
 	Hostname      string   `xml:"server_host"`
+	URI           string   `xml:"server_uri"`
 	SessionKey    string   `xml:"session_key"`
 	CheckpointDir string   `xml:"checkpoint_dir"`
 	// there are multiple stanzas, which are all children of element <configuration>
 	Stanzas []Stanza `xml:"configuration>stanza"`
+}
+
+// LoadConfigFromStdin reads a XML-formatted configuration from stdin,
+// parses it and loads it within the ModInputConfig data structure
+// Returns the number of bytes read and an error
+func (c *ModInputConfig) LoadConfigFromStdin() (cnt int64, err error) {
+	buf := new(bytes.Buffer)
+	if cnt, err = buf.ReadFrom(os.Stdin); err != nil {
+		return cnt, err
+	} else if cnt < 10 {
+		// additionally check for data which is waaaay too small to be parsed.
+		return cnt, fmt.Errorf("LoadConfigFromStdin: error xmldata too small.")
+	}
+	// parse and load the XML data within the ModInputConfig data structure
+	if err = xml.Unmarshal(buf.Bytes(), &c); err != nil {
+		return cnt, fmt.Errorf("LoadConfigFromStdin: error when parsing xml configuration. %s", err.Error())
+	}
+	return cnt, nil
 }
 
 type Stanza struct {
@@ -80,16 +101,6 @@ type Param struct {
 	XMLName xml.Name `xml:"param"`
 	Name    string   `xml:"name,attr"` // name attribute of the param
 	Value   string   `xml:",chardata"` // access the textual data of the param value
-}
-
-func (c *ModInputConfig) ParseConfig(xmldata []byte) (err error) {
-	if xmldata == nil || len(xmldata) < 10 {
-		return fmt.Errorf("ParseConfig: xmldata cannot be nil or have zero length")
-	}
-	if err = xml.Unmarshal(xmldata, &c); err != nil {
-		return err
-	}
-	return nil
 }
 
 /* Usage sample
