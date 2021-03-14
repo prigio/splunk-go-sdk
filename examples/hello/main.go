@@ -12,41 +12,29 @@ func streamEvents(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {
 	mi.Log("INFO", "'Hello' modular input internal logging")
 	ev := mi.NewDefaultEvent(stanza)
 	ev.Time = modinputs.GetEpochNow()
-	ev.Data = "Hello " + stanza.GetParam("text")
+	ev.Data = "Hello " + stanza.Param("text")
 	mi.WriteToSplunk(ev)
 	return nil // fmt.Errorf("TEST ERRROR")
 }
 
-/*
 func validate(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {
-	return fmt.Errorf("VALIDATION ERROR")
+	mi.Log("INFO", "Within custom validation function")
+	return nil
 }
-*/
+
 func main() {
 	// Prepare the script
 	script := &modinputs.ModularInput{}
 	script.Title = "Hello world input"
 	script.Description = "This is a sample description for the test input"
 	script.StanzaName = "hello"
-	script.UseExternalValidation = false
+	script.UseExternalValidation = true
 	script.UseSingleInstance = true
-	script.Debug = false
+	script.EnableDebug()
 	script.Stream = streamEvents
-	script.Validate = nil
+	script.Validate = validate
 
-	argText := &modinputs.ModInputArg{
-		Name:             "text",
-		Title:            "Text to input",
-		Description:      "Description of text input",
-		DataType:         modinputs.ArgDataTypeStr,
-		RequiredOnCreate: true,
-		RequiredOnEdit:   true,
-		//		Validation: "",
-		//		CustomValidation: "",
-		//		CustomValidationErrMessage: "",
-	}
-	// argText.SetValidation(modinputs.ArgValidationIsPort)
-	script.AddArgument(argText)
+	script.AddArgument("text", "Text to input", "Description of text input", modinputs.ArgDataTypeStr, "", true, true)
 
 	err := script.Run()
 	if err != nil {

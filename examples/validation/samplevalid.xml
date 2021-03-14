@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<items>
+  <server_host>testhost.local</server_host>
+  <server_uri>https://127.0.0.1:8089</server_uri>
+  <session_key>KpHEoRLCJl6TZ3_IRs7lxkMP1nRzFnh6FvqESwpUEA0L05pxEg_XAenz5HUEnc10POfhvuJpiMJHu6WA5hcqJxSLHQCnnb_SXTLQybSCEwBfyEFnTF</session_key>
+  <checkpoint_dir>/Applications/Splunk/var/lib/splunk/modinputs/httpcheck</checkpoint_dir>
+  <item name="gosdkcheck://google-tests">
+    <param name="disabled">0</param>
+    <param name="host">testhost.local</param>
+    <param name="index">main</param>
+    <param name="interval"></param>
+    <param name="sourcetype">net:httpcheck</param>
+    <param name="target_hosts">google.com,www.yahoo.com</param>
+    <param name="tags">infrastructure="gcp" src_zone="common" dst_zone=internet</param>
+    <param name="http_method">GET</param>
+    <param name="protocol">https</param>
+    <param name="path">/</param>
+    <param name="port"></param>
+    <param name="user_agent">Splunk-HTTP-Check</param>
+    <param name="skip_verify_cert">true</param>
+    <param name="timeout">0.001</param>
+    <param name="proxy"></param>
+  </item>
+</items>
+

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
@@ -32,7 +33,9 @@ In some cases, there might be NO <stanza> elements
 </input>
 */
 
-type ModInputConfig struct {
+// inputConfig represents the parsed XML which Splunk provides
+// on STDIN when starting the execution of a modular input
+type inputConfig struct {
 	XMLName       xml.Name `xml:"input"`
 	Hostname      string   `xml:"server_host"`
 	URI           string   `xml:"server_uri"`
@@ -42,84 +45,78 @@ type ModInputConfig struct {
 	Stanzas []Stanza `xml:"configuration>stanza"`
 }
 
-// LoadConfigFromStdin reads a XML-formatted configuration from stdin,
-// parses it and loads it within the ModInputConfig data structure
-// Returns the number of bytes read and an error
-func (c *ModInputConfig) LoadConfigFromStdin() (cnt int64, err error) {
+// getInputConfigFromXML reads a XML-formatted configuration from the provided Reader,
+// parses it and loads it within an inputConfig data structure
+func getInputConfigFromXML(input io.Reader) (*inputConfig, error) {
+	if input == nil {
+		input = os.Stdin
+	}
 	buf := new(bytes.Buffer)
-	if cnt, err = buf.ReadFrom(os.Stdin); err != nil {
-		return cnt, err
+	if cnt, err := buf.ReadFrom(input); err != nil {
+		return nil, fmt.Errorf("getInputConfigFromXML: %s.", err.Error())
 	} else if cnt < 10 {
 		// additionally check for data which is waaaay too small to be parsed.
-		return cnt, fmt.Errorf("LoadConfigFromStdin: error xmldata too small.")
+		return nil, fmt.Errorf("getInputConfigFromXML: error xmldata too small.")
+	}
+	// parse and load the XML data within the inputConfig data structure
+	ic := &inputConfig{}
+	if err := xml.Unmarshal(buf.Bytes(), ic); err != nil {
+		return nil, fmt.Errorf("getInputConfigFromXML: error when parsing input configuration xml. %s. %s", err.Error(), strings.ReplaceAll(buf.String(), "\n", "\\n"))
+	}
+	return ic, nil
+}
+
+/* This is the most generic form of the XML coming from splunkd via stdinput
+Ref: https://docs.splunk.com/Documentation/Splunk/8.1.2/AdvancedDev/ModInputsValidate
+In case of VALIDATION of parameters, the XML is different from the one received when executing the mod input :-/
+
+<items>
+    <server_host>myHost</server_host>
+    <server_uri>https://127.0.0.1:8089</server_uri>
+    <session_key>123102983109283019283</session_key>
+    <checkpoint_dir>/opt/splunk/var/lib/splunk/modinputs</checkpoint_dir>
+    <item name="myScheme">
+        <param name="param1">value1</param>
+		<param name="param2">value2</param>
+        <param_list name="param3">
+            <value>value2</value>
+            <value>value3</value>
+            <value>value4</value>
+        </param_list>
+    </item>
+</items>
+*/
+
+// ValidationConfig represents the parsed XML which Splunk provides
+// on STDIN when starting the parameters validation of a modular input (command-line param: --validate-arguments)
+type validationConfig struct {
+	XMLName       xml.Name `xml:"items"`
+	Hostname      string   `xml:"server_host"`
+	URI           string   `xml:"server_uri"`
+	SessionKey    string   `xml:"session_key"`
+	CheckpointDir string   `xml:"checkpoint_dir"`
+	// there can only be one validation item
+	Item Stanza `xml:"item"`
+}
+
+// getValidationConfigFromXML reads a XML-formatted configuration from the provided "Reader" object,
+// It parses the xml and loads it within the ValidationConfig data structure
+// The XML MUST conform to the specification https://docs.splunk.com/Documentation/Splunk/8.1.2/AdvancedDev/ModInputsValidate
+func getValidationConfigFromXML(input io.Reader) (*validationConfig, error) {
+	if input == nil {
+		input = os.Stdin
+	}
+	buf := new(bytes.Buffer)
+	if cnt, err := buf.ReadFrom(os.Stdin); err != nil {
+		return nil, fmt.Errorf("getValidationConfigFromXML: %s.", err.Error())
+	} else if cnt < 10 {
+		// additionally check for data which is waaaay too small to be parsed.
+		return nil, fmt.Errorf("getValidationConfigFromXML: error xmldata too small.")
 	}
 	// parse and load the XML data within the ModInputConfig data structure
-	if err = xml.Unmarshal(buf.Bytes(), &c); err != nil {
-		return cnt, fmt.Errorf("LoadConfigFromStdin: error when parsing xml configuration. %s", err.Error())
+	vc := &validationConfig{}
+	if err := xml.Unmarshal(buf.Bytes(), vc); err != nil {
+		return nil, fmt.Errorf("getValidationConfigFromXML: error when parsing validation xml. %s. %s", err.Error(), strings.ReplaceAll(buf.String(), "\n", " "))
 	}
-	return cnt, nil
+	return vc, nil
 }
-
-type Stanza struct {
-	XMLName xml.Name `xml:"stanza"`
-	Name    string   `xml:"name,attr"` // name attribute of the stanza
-	App     string   `xml:"app,attr"`  // application where the configuration is defined
-	Params  []Param  `xml:"param"`
-}
-
-// GetParam scans the stanza s parameters and returns the param with the specified name. If not found, returns ""
-func (s *Stanza) GetParam(name string) (ret string) {
-	for _, p := range s.Params {
-		if strings.ToLower(p.Name) == name {
-			return p.Value
-		}
-	}
-	return ""
-}
-
-// GetSourcetype returns the sourcetype configured for the stanza s
-func (s *Stanza) GetSourcetype() (ret string) {
-	return s.GetParam("sourcetype")
-}
-
-// GetHost returns the host configured for the stanza s
-func (s *Stanza) GetHost() (ret string) {
-	return s.GetParam("host")
-}
-
-// GetSource returns the sourcsourceetype configured for the stanza s
-func (s *Stanza) GetSource() (ret string) {
-	return s.GetParam("source")
-}
-
-// GetIndex returns the index configured for the stanza s
-func (s *Stanza) GetIndex() (ret string) {
-	return s.GetParam("index")
-}
-
-type Param struct {
-	XMLName xml.Name `xml:"param"`
-	Name    string   `xml:"name,attr"` // name attribute of the param
-	Value   string   `xml:",chardata"` // access the textual data of the param value
-}
-
-/* Usage sample
-s := `<input>
-  <server_host>myHost</server_host>
-  <server_uri>https://127.0.0.1:8089</server_uri>
-  <session_key>123102983109283019283</session_key>
-  ....`
-
-config, err := modinputs.ParseInputConfig([]byte(s))
-if err != nil {
-	fmt.Println(err.Error())
-} else {
-	fmt.Printfln("SessionKey: %s\n", config.SessionKey)
-	for _, stanza := range config.Configuration.Stanzas {
-		fmt.Printf("Name:%s\n", stanza.Name)
-		for _, param := range stanza.Params {
-			fmt.Printf("Name:%s, val:%s\n", param.Name, param.Value)
-		}
-	}
-}
-*/
