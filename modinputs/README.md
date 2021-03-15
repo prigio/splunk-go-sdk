@@ -18,7 +18,7 @@ Development workflow
 1. Install the library within your _go_ environment (`go get ...`) as described in the [readme.md](../readme.md) file at the root of this repository.
 2. Create a struct of type `script := &modinputs.ModularInput{}`. This will be your main script.
 3. Configure the modular input properties: `script.Title = "Hello world" ...`
-4. Configure arguments `script.AddArgument(&modinputs.ModInputArg{....})`
+4. Configure arguments `script.AddArgument(name, Title, description, ....)`
 5. (Optional) define a function to validate input parameters having signature
     `    func validate(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error`
     Register the function within the modular input:
@@ -41,7 +41,6 @@ Install the library within your _go_ environment as described in the [readme.md]
 Create a file which will be the main script of your modular input:
 
 ```go
-
 package main
 
 import (
@@ -50,54 +49,37 @@ import (
 
 	"git.cocus.com/bigdata/splunk-go-sdk/modinputs"
 )
-// the actual function used to generate Splunk events based on configurations provided within the `stanza`
+
 func streamEvents(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {
 	time.Sleep(1 * time.Second)
-	mi.Log("INFO", "'Hello' modular input internal logging")
+	mi.Log("INFO", "'Hello' modular input internal logging: starting 'streamEvents' for stanza=%s", stanza.Name)
 	ev := mi.NewDefaultEvent(stanza)
-	ev.Time = modinputs.GetEpochNow()
-	ev.Data = "Hello " + stanza.GetParam("text")
+	ev.Time = time.Now()
+	ev.Data = "Hello " + stanza.Param("text")
 	mi.WriteToSplunk(ev)
-	return nil // fmt.Errorf("TEST ERRROR")
+	return nil
+}
+
+func validate(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {
+	mi.Log("INFO", "Within custom validation function")
+	return nil
 }
 
 func main() {
-	// Create an instance of the modinputs.ModularInput Struct
-	script := &modinputs.ModularInput{}
-    // name of the input type, appearing on Splunk UI
-    script.Title = "Hello world input"
-	script.Description = "This is a sample description for the test input"
-	// !lowercase! name of the stanza used within splunk's inputs.conf
-    script.StanzaName = "hello"
-    script.Debug = false
-    // see Splunk documentation for these
-    script.UseExternalValidation = false
-	script.UseSingleInstance = true
-    
-    // these two functions are responsible to
-    // validate the inputs received by Splunk 
-    // (only needed if script.UseExternalValidation=true)
-    script.Validate = nil
-    // actually generate the data that needs to be read by splunk
-	script.Stream = streamEvents
-
-    // define the expected arguments
-	argText := &modinputs.ModInputArg{
-		Name:             "text",
-		Title:            "Text to input",
-		Description:      "Description of text input",
-		DataType:         modinputs.ArgDataTypeStr,
-		RequiredOnCreate: true,
-		RequiredOnEdit:   true,
-		//		Validation: "",
-		//		CustomValidation: "",
-		//		CustomValidationErrMessage: "",
+	// Prepare the script
+	script := &modinputs.ModularInput{
+		Title:                 "Hello world input",
+		Description:           "This is a sample description for the test input",
+		StanzaName:            "hello",
+		UseExternalValidation: true,
+		UseSingleInstance:     true,
+		Stream:                streamEvents,
+		Validate:              validate,
 	}
-    // argText.SetValidation(modinputs.ArgValidationIsPort)
-    // add argument to script
-	script.AddArgument(argText)
+	script.EnableDebug()
+	script.AddArgument("text", "Text to input", "Description of text input", modinputs.ArgDataTypeStr, "", true, true)
 
-    // start the script!
+	// Start actual execution
 	err := script.Run()
 	if err != nil {
 		// this will NOT run deferred function, so in case we have any, need to take care about that. Simply: do NOT use such functions within the main() ;-)

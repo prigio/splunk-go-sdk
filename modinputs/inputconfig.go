@@ -9,6 +9,11 @@ import (
 	"strings"
 )
 
+/*
+This file contains structs and utilities to read the XML-based configuration
+and validation instructions that splunk passes to the modular input.
+*/
+
 /* This is the most generic form of the XML coming from splunkd via stdinput
 In some cases, there might be NO <stanza> elements
 <input>

@@ -42,7 +42,7 @@ Within your _go_ source files, import the libraries:
 
 ```
 // somesource.go
-package somepackage
+package main
 
 import (
 	// ... some other imports

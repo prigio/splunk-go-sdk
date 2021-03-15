@@ -74,3 +74,51 @@ func TestSchemeXML(t *testing.T) {
 		t.Errorf("PrintXMLScheme() did not return the expacted value.\n## Expected=\n'%s'\n ## Generated:\n'%s'\n", expectedScheme, string(generatedScheme))
 	}
 }
+
+func TestEvent(t *testing.T) {
+	mi := ModularInput{
+		StanzaName:            "teststanzaname",
+		Title:                 "Test Scheme",
+		Description:           "This is the description of the test scheme",
+		UseExternalValidation: false,
+		UseSingleInstance:     false,
+	}
+	st := Stanza{
+		Name: "testscheme://testinputname",
+		App:  "testapp",
+		Params: []Param{
+			{Name: "sourcetype", Value: "testsourcetype"},
+			{Name: "index", Value: "testindex"},
+			{Name: "host", Value: "testhost"},
+			{Name: "source", Value: "testsource"},
+		},
+	}
+	ev := mi.NewDefaultEvent(&st)
+	ev.Data = "some log message"
+	if ev.Stanza != st.Name {
+		t.Errorf("Event's stanza does not match: expected=%s got=%s", st.Name, ev.Stanza)
+	}
+	if ev.Stanza != st.Name {
+		t.Errorf("Event's index does not match: expected=%s got=%s", st.Param("index"), ev.Index)
+	}
+	if ev.Stanza != st.Name {
+		t.Errorf("Event's sourcetype does not match: expected=%s got=%s", st.Param("sourcetype"), ev.SourceType)
+	}
+	if ev.Stanza != st.Name {
+		t.Errorf("Event's source does not match: expected=%s got=%s", st.Param("source"), ev.Source)
+	}
+	if ev.Stanza != st.Name {
+		t.Errorf("Event's host does not match: expected=%s got=%s", st.Param("host"), ev.Host)
+	}
+	t.Log("Writing the event to stdout")
+	if err := mi.WriteToSplunk(ev); err != nil {
+		t.Errorf("Writing event to Stdout raised error: %s", err.Error())
+	}
+	if mi.cntDataEventsGeneratedbyStanza != 1 {
+		t.Errorf("ModularInput did not track generated event within cntDataEventsGeneratedbyStanza. expected=1 got=%d", mi.cntDataEventsGeneratedbyStanza)
+	}
+	if mi.cntDataEventsGeneratedTotal != 1 {
+		t.Errorf("ModularInput did not track generated event within cntDataEventsGeneratedTotal. expected=1 got=%d", mi.cntDataEventsGeneratedTotal)
+	}
+
+}

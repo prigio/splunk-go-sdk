@@ -32,7 +32,7 @@ func validate(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {
 func streamEvents(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {
 
 	ev := mi.NewDefaultEvent(stanza)
-	ev.Time = modinputs.GetEpoch(time.Now())
+	ev.Time = time.Now()
 	ev.Data = stanza.KVString()
 	mi.WriteToSplunk(ev)
 
@@ -40,21 +40,21 @@ func streamEvents(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {
 }
 
 func main() {
-	script := &modinputs.ModularInput{}
-	script.EnableDebug()
-	script.Title = "Go SDK test"
-	script.Description = "Tests if an the golang modular inputs sdk works properly"
-	script.StanzaName = "gosdkcheck"
-	script.UseExternalValidation = true
-	script.UseSingleInstance = false
-	script.Stream = streamEvents
-	script.Validate = validate
-	var err error
+	script := &modinputs.ModularInput{
+		Title:                 "Go SDK test",
+		Description:           "Tests if an the golang modular inputs sdk works properly",
+		StanzaName:            "gosdkcheck",
+		UseExternalValidation: true,
+		UseSingleInstance:     false,
+		Stream:                streamEvents,
+		Validate:              validate,
+	}
 
+	script.EnableDebug()
 	script.AddArgument("param1", "Param1", "A string parameter", modinputs.ArgDataTypeStr, "", true, true)
 	script.AddArgument("debug", "Debug", "", modinputs.ArgDataTypeBool, "", true, true)
-
-	err = script.Run()
+	// Start actual execution
+	err := script.Run()
 	if err != nil {
 		// this will NOT run deferred function, so in case we have any, need to take care about that. Simply: do NOT use such functions within the main() ;-)
 		os.Exit(1)

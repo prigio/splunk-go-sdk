@@ -3,11 +3,12 @@ package modinputs
 import (
 	"encoding/xml"
 	"fmt"
-	"github.com/google/uuid"
 	"os"
 	"path"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // StreamingFunc is the signature of the function used to generate the data for the modular input
@@ -100,7 +101,7 @@ func (mi *ModularInput) Log(level string, message string, a ...interface{}) (err
 		// do not do anything if debug is not enabled
 		t := time.Now().Round(time.Millisecond)
 		if mi.internalLogEvent != nil {
-			mi.internalLogEvent.Time = GetEpoch(t)
+			mi.internalLogEvent.Time = t
 			// prefix the message with timestamp and log_level
 			message = "[" + t.Format("2006-01-02 15:04:05.000 -0700") + "] " + level + " run_id=" + mi.runID + " - " + message
 			//time.Format uses a string with such parameters to define the output format: Mon Jan 2 15:04:05 -0700 MST 2006
@@ -116,18 +117,40 @@ func (mi *ModularInput) Log(level string, message string, a ...interface{}) (err
 	return err
 }
 
+// logPlain forces a plain-text write to STDERR. This is useful to force the log to appear within splunk's splunkd.log,
+// same as the ones indicating the start of the run.
+// For info related to the arguments, see Log()
+func (mi *ModularInput) logPlain(level string, message string, a ...interface{}) (err error) {
+	level = strings.ToUpper(level)
+	if level == "WARNING" {
+		// Typical error, just manage it...
+		level = "WARN"
+	}
+	if level != "DEBUG" && level != "INFO" && level != "WARN" && level != "ERROR" && level != "FATAL" {
+		fmt.Fprintf(os.Stderr, "ERROR - ModularInput.Log invoked with invalid level parameter. Accepted: DEBUG, INFO, WARN, ERROR, FATAL. Provided: '%s'\n", level)
+		return fmt.Errorf("ModularInput.Log: invalid value of 'level' provided. Accepted: DEBUG, INFO, WARN, ERROR, FATAL. Provided: '%s'", level)
+	}
+	// do not do anything if debug is not enabled
+	if level != "DEBUG" || (level == "DEBUG" && mi.debug) {
+		message = "ModularInput " + mi.StanzaName + ": " + level + " run_id=" + mi.runID + " - " + message + "\n"
+		_, err = fmt.Fprintf(os.Stderr, message, a...)
+	}
+	return err
+}
+
 // WriteToSplunk outputs a generated event in the format accepted by Splunk
 // Returns the number of bytes written, an error if anything went wrong
-func (mi *ModularInput) WriteToSplunk(se *SplunkEvent) (cnt int, err error) {
-	var b []byte
-	if b, err = se.xml(); err != nil {
-		return -1, err
+// This function IS NOT concurrency safe!
+func (mi *ModularInput) WriteToSplunk(se *SplunkEvent) error {
+	if xmlStr, err := se.xml(); err != nil {
+		return err
+	} else {
+		// increase the counter of the generated events
+		mi.cntDataEventsGeneratedbyStanza++
+		mi.cntDataEventsGeneratedTotal++
+		_, err = os.Stdout.WriteString(xmlStr)
+		return err
 	}
-	// increase the counter of the generated events
-	mi.cntDataEventsGeneratedbyStanza++
-	mi.cntDataEventsGeneratedTotal++
-	cnt, err = os.Stdout.Write(b)
-	return cnt, err
 }
 
 // NewDefaultEvent provides a template for the SplunkEvent to be used to log actual data to be imported to Splunk
@@ -137,7 +160,7 @@ func (mi *ModularInput) NewDefaultEvent(stanza *Stanza) (ev *SplunkEvent) {
 		// NOT specifying Data intentionally
 		ev = &SplunkEvent{
 			// Anything can be overridded by the actual script
-			Time:       GetEpochNow(),
+			Time:       time.Now(),
 			Stanza:     stanza.Name,
 			SourceType: stanza.Sourcetype(),
 			Index:      stanza.Index(),
@@ -149,7 +172,7 @@ func (mi *ModularInput) NewDefaultEvent(stanza *Stanza) (ev *SplunkEvent) {
 	} else {
 		// If no configurations are present, we basically just return a generic event
 		ev = &SplunkEvent{
-			Time:     GetEpochNow(),
+			Time:     time.Now(),
 			Unbroken: false,
 			Done:     false,
 		}
@@ -157,7 +180,8 @@ func (mi *ModularInput) NewDefaultEvent(stanza *Stanza) (ev *SplunkEvent) {
 	return ev
 }
 
-// Run is the main function that you, as a modular input script developer must invoke to start the actual processing.
+// Run is the main function that starts the actual processing.
+// It reads the command-line parameters and performs the correct actions.
 func (mi *ModularInput) Run() (err error) {
 	mi.runID = uuid.New().String()[0:8]
 	mi.Log("DEBUG", "ModularInput.Run started. Cmd-line parameters: '%s'", strings.Join(os.Args, " "))
@@ -199,7 +223,6 @@ func (mi *ModularInput) Run() (err error) {
 			mi.uri = vc.URI
 			mi.sessionKey = vc.SessionKey
 			mi.checkpointDir = vc.CheckpointDir
-			//mi.stanzas = []Stanza{*vc.Item.asStanza()}
 			mi.stanzas = []Stanza{vc.Item}
 		}
 		return mi.runValidation()
@@ -221,6 +244,8 @@ func (mi *ModularInput) Run() (err error) {
 	return nil
 }
 
+// runStreaming executes the data generation function configured within ModularInput mi
+// on the input configurations provided as XML on stdin
 func (mi *ModularInput) runStreaming() (err error) {
 	// these two vars are used to track the duration of the overall streaming function
 	var duration time.Duration
@@ -273,6 +298,8 @@ func (mi *ModularInput) runStreaming() (err error) {
 	return err
 }
 
+// runValidation executes the validation function configured within ModularInput mi
+// on the validation configuration provided as XML on stdin
 func (mi *ModularInput) runValidation() error {
 	mi.Log("DEBUG", `Starting argument validation`)
 
@@ -300,13 +327,14 @@ func (mi *ModularInput) runValidation() error {
 // setupEventBasedInternalLogging configures logging to be performed through SplunkEvent events written to index=_internal instead of using plain text on standard-err.
 // Before activating this, the user is informed with a WARN message on StdErr saying which source/sourcetype is being used for logging purposes from now on
 // This function can only be invoked when an active configuration has been provided in input, so, when we start streaming events.
+// If stanza==nil, this functions panics.
 func (mi *ModularInput) setupEventBasedInternalLogging(stanza *Stanza) {
 	if stanza != nil {
 		inputSourcetype := "modinput:" + stanza.Scheme()
-		mi.Log("INFO", `Logging using 'index=_internal sourcetype="%s" source="%s"`, inputSourcetype, stanza.Name)
+		mi.logPlain("INFO", `Starting execution of stanza="%s". Logging related internal data as 'index=_internal sourcetype="%s" source="%s"'`, stanza.Name, inputSourcetype, stanza.Name)
 		mi.internalLogEvent = &SplunkEvent{
 			// NOT specifying Data and Host intentionally
-			Time:       GetEpochNow(),
+			Time:       time.Now(),
 			Stanza:     stanza.Name,
 			SourceType: inputSourcetype,
 			Index:      "_internal",
@@ -315,7 +343,8 @@ func (mi *ModularInput) setupEventBasedInternalLogging(stanza *Stanza) {
 			Done:       false,
 		}
 	} else {
-		mi.Log("ERROR", "Function setupEventBasedInternalLogging() called without a stanza being specified, this is an error within the library")
+		mi.logPlain("FATAL", "Function setupEventBasedInternalLogging() called without a stanza being specified, this is an error within the library. Interrupting execution.")
+		panic("Library error: function setupEventBasedInternalLogging() called without a stanza being specified.")
 	}
 }
 

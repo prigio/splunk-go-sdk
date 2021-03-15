@@ -1,34 +1,5 @@
 // Package modinputs provides utilities to write a Splunk modular input.
-//
-// The following is a representation of the data structures and main public
-// methods made available by this library
-//
-// ModularInput                          SplunkEvent
-// │    │                                   │
-// │    ├─Log(level, message)               └─NewSplunkEventFromDefaults()
-// │    │
-// │    ├─WriteToSplunk(event)
-// │    │
-// │    ├─NewDefaultEvent(stanza)
-// │    │
-// │    └─Run()
-// │
-// ├──ModInputConfig
-// │  │     │
-// │  │     └─LoadConfigFromStdin(xml)
-// │  │
-// │  └──[]Stanza
-// │     │  │
-// │     │  └─GetParam(name)
-// │     │
-// │     └──[]Param
-// │
-// │
-// └──ModInputScheme
-//    │     │
-//    │     ├─PrintXMLScheme()
-//    │     │
-//    │     └─ExampleConf()
-//    │
-//    └──[]ModInputArg
+// Use the ModularInput struct to define all the necessary properties and Run your input
+// test this module using `go test`
+// you can additionally run benchmarks with `go test -bench .`
 package modinputs
