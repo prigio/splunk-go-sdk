@@ -2,7 +2,7 @@ module validation
 
 go 1.15
 
-replace git.cocus.com/bigdata/splunk-go-sdk => ../../
+replace github.com/prigio/splunk-go-sdk => ../../
 require (
-	git.cocus.com/bigdata/splunk-go-sdk v0.0.8
+	github.com/prigio/splunk-go-sdk v0.0.8
 )

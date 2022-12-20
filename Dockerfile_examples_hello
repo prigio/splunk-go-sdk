@@ -8,9 +8,9 @@ COPY go.mod .
 ARG GOOS
 ARG GOARCH
 # for gitlab private repos, authentication with tokens is necessary 
-# and GOPRIVATE must skip verification for git.cocus.com
-RUN echo "machine git.cocus.com login go-build password 6H93rHDDn-HnL26tTtRP" > ~/.netrc
-ENV GOPRIVATE=git.cocus.com/*
+# and GOPRIVATE must skip verification for private git server
+# RUN echo "machine gitserver.company.com login go-build password SOME-TOKEN" > ~/.netrc
+# ENV GOPRIVATE=gitserver.company.com/*
 WORKDIR /src/examples/hello
 RUN go mod tidy
 RUN GOOS=${GOOS} GOARCH=${GOARCH} go build -o /out/example main.go

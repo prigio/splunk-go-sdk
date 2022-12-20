@@ -1,4 +1,4 @@
-module git.cocus.com/bigdata/splunk-go-sdk
+module github.com/prigio/splunk-go-sdk
 
 go 1.15
 

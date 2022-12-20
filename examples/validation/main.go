@@ -19,7 +19,7 @@ import (
 	"os"
 	"time"
 
-	"git.cocus.com/bigdata/splunk-go-sdk/modinputs"
+	"github.com/prigio/splunk-go-sdk/modinputs"
 )
 
 func validate(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {

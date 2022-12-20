@@ -1,4 +1,4 @@
-Library `git.cocus.com/bigdata/splunk-go-sdk/modinputs`
+Library `github.com/prigio/splunk-go-sdk/modinputs`
 =====================================================
 
 Offered functionality
@@ -47,7 +47,7 @@ import (
 	"os"
 	"time"
 
-	"git.cocus.com/bigdata/splunk-go-sdk/modinputs"
+	"github.com/prigio/splunk-go-sdk/modinputs"
 )
 
 func streamEvents(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {

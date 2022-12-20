@@ -20,22 +20,24 @@ For detailed documentation, refer to:
 
 ## Usage
 
-### Download library
+### Download library - DEPRECATED
+**This instructions only apply to private repositories.**
+
 Note, as this is a PRIVATE repository, you need to:
 
 1. Get a build token from the team managing this repository. 
-    The token is configured within git.cocus.com. 
+    The token is configured within github.com. 
 2. Configure your build pipeline to use that token when downloading the library.
     Create a file `~/.netrc` with this content:
 
     ```
-        machine git.cocus.com login go-build password <build-token>
+        machine github.com login go-build password <build-token>
     ```
 	This file will be read from the _go_ utilities to get access to the repository.
 3. Configure your build pipeline with the following environment variable:
-    `    GOPRIVATE=git.cocus.com/*`
+    `    GOPRIVATE=github.com/*`
 4. Test your build pipeline: manually execute the following command and check its results
-    `    go get git.cocus.com/bigdata/splunk-go-sdk/modinputs`
+    `    go get github.com/prigio/splunk-go-sdk/modinputs`
 
 ### Import in code
 Within your _go_ source files, import the libraries:
@@ -47,9 +49,9 @@ package main
 import (
 	// ... some other imports
 
-	"git.cocus.com/bigdata/splunk-go-sdk/modinputs"
+	"github.com/prigio/splunk-go-sdk/modinputs"
     // if needed
-    // "git.cocus.com/bigdata/splunk-go/client"
+    // "github.com/prigio/splunk-go-sdk/client"
 )
 // ... your code
 
