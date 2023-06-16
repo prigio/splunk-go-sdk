@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
+
+	"github.com/prigio/splunk-go-sdk/client"
 )
 
 /*
@@ -57,17 +60,55 @@ func getInputConfigFromXML(input io.Reader) (*inputConfig, error) {
 		input = os.Stdin
 	}
 	buf := new(bytes.Buffer)
-	if cnt, err := buf.ReadFrom(input); err != nil {
+	if _, err := buf.ReadFrom(input); err != nil {
 		return nil, fmt.Errorf("getInputConfigFromXML: %s.", err.Error())
-	} else if cnt < 10 {
-		// additionally check for data which is waaaay too small to be parsed.
-		return nil, fmt.Errorf("getInputConfigFromXML: error xmldata too small.")
 	}
 	// parse and load the XML data within the inputConfig data structure
 	ic := &inputConfig{}
 	if err := xml.Unmarshal(buf.Bytes(), ic); err != nil {
 		return nil, fmt.Errorf("getInputConfigFromXML: error when parsing input configuration xml. %s. %s", err.Error(), strings.ReplaceAll(buf.String(), "\n", "\\n"))
 	}
+	return ic, nil
+}
+
+// getInputConfigInteractive uses the Args[] definition of a modular input to prepare an input configuration based on:
+// - command line parameters
+// - interactively asking the user if no command-line parameter was found for an argument
+func getInputConfigInteractive(mi *ModularInput) (*inputConfig, error) {
+	// first, need to get splunk endpoint, username and password to be able to login into the service if necessary.
+	ic := &inputConfig{}
+	ic.CheckpointDir = filepath.Join(os.TempDir(), mi.runID)
+	fmt.Printf("CheckPointDir set to '%s'", ic.CheckpointDir)
+
+	fmt.Println("Interactively provide information to access local splunkd service.")
+	ic.URI = askForInput("Splunkd URL", "https://localhost:8089", false)
+	username := askForInput("Splunk username", "admin", false)
+	password := askForInput("Splunk password", "", true)
+
+	ss, err := client.NewSplunkServiceWithUsernameAndPassword(ic.URI, username, password, "", true)
+	if err != nil {
+		return nil, fmt.Errorf("connection failed to splunkd on '%s' with username '%s': %s", ic.URI, username, err.Error())
+	}
+	ic.SessionKey = ss.GetSessionKey()
+
+	// Stanzas hosts the configurations provided to the modular input
+	ic.Stanzas = make([]Stanza, 1)
+	stanza := Stanza{Name: "interactive-input"}
+	stanza.Params = make([]Param, len(mi.Args))
+
+	fmt.Println("Interactively provide values for modular input parameters.")
+	var prompt, val string
+	for seq, arg := range mi.Args {
+		prompt = fmt.Sprintf("Provide parameter %s (%s, '%s')", arg.Title, arg.DataType, arg.Name)
+		if arg.Description != "" {
+			prompt = fmt.Sprintf("%s\n    %s\n", prompt, arg.Description)
+		}
+		val = askForInput(prompt, arg.DefaultValue, false)
+		stanza.Params[seq] = Param{Name: arg.Name, Value: val}
+	}
+
+	ic.Stanzas[0] = stanza
+
 	return ic, nil
 }
 

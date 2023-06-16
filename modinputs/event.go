@@ -86,7 +86,8 @@ func (se *SplunkEvent) getSplunkAsterisksHeader() string {
 */
 
 // XML generates a Splunk ModularInput compatible XML representation of the SplunkEvent.
-//    See https://docs.splunk.com/Documentation/Splunk/8.1.1/AdvancedDev/ModInputsStream
+//
+//	See https://docs.splunk.com/Documentation/Splunk/8.1.1/AdvancedDev/ModInputsStream
 func (se *SplunkEvent) xml() (string, error) {
 	// It would be easy to use xml.Marshal, but tests revelaed it takes 30% time to generate events than this method.
 	// For the xml needed to generate the Scheme it is not important, as that is only done once per execution.
@@ -104,12 +105,13 @@ func (se *SplunkEvent) xml() (string, error) {
 	if se.Stanza != "" {
 		buf.WriteString(` stanza="`)
 		xml.EscapeText(buf, []byte(se.Stanza))
+		buf.WriteString(`"`)
 	}
 	if se.Unbroken {
 		// unbroken events are events whose data attribute spans multiple <event> xml elements
-		buf.WriteString(`" unbroken="1`)
+		buf.WriteString(` unbroken="1"`)
 	}
-	buf.WriteString(`">`)
+	buf.WriteString(`>`)
 
 	// NOTE OF PERFORMANCE
 	// After profiling this code
@@ -158,7 +160,8 @@ func (se *SplunkEvent) xml() (string, error) {
 }
 
 // string generates a plain-text representation of the SplunkEvent.
-//    See https://docs.splunk.com/Documentation/Splunk/8.1.1/AdvancedDev/ModInputsStream
+//
+//	See https://docs.splunk.com/Documentation/Splunk/8.1.1/AdvancedDev/ModInputsStream
 func (se *SplunkEvent) string(prependTime bool) (string, error) {
 	// It would be easy to use xml.Marshal, but tests revelaed it takes 30% time to generate events than this method
 	// for the xml needed to generate the Scheme it is not important, as that is only done once per execution.

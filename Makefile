@@ -1,7 +1,7 @@
 #Environment settings for cross compilation
 #Ref: https://www.digitalocean.com/community/tutorials/how-to-build-go-executables-for-multiple-platforms-on-ubuntu-16-04
 
-GOCONTAINERIMAGE=golang:1.16-rc
+GOCONTAINERIMAGE=golang:1.20
 ENV_OSX=--build-arg GOOS=darwin --build-arg GOARCH=amd64
 ENV_LIN=--build-arg GOOS=linux --build-arg GOARCH=amd64
 

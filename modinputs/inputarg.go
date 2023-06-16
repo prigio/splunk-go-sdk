@@ -25,11 +25,12 @@ const (
 
 // Parameters used by the ModularInput.
 type InputArg struct {
-	XMLName     xml.Name `xml:"arg"`
-	Title       string   `xml:"title"`
-	Description string   `xml:"description,omitempty"`
-	Name        string   `xml:"name,attr"`
-	DataType    string   `xml:"data_type,omitempty"`
+	XMLName      xml.Name `xml:"arg"`
+	Title        string   `xml:"title"`
+	Description  string   `xml:"description,omitempty"`
+	Name         string   `xml:"name,attr"`
+	DataType     string   `xml:"data_type,omitempty"`
+	DefaultValue string   `xml:"-"` // this is omitted in the XML format, since this is not foreseen by Splunk.
 	// validation should be at best be configured through methods
 	Validation       string `xml:"validation,omitempty"`
 	RequiredOnCreate bool   `xml:"required_on_create"`

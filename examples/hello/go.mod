@@ -1,6 +1,6 @@
 module hello
 
-go 1.15
+go 1.20
 
 replace github.com/prigio/splunk-go-sdk => ../../
 

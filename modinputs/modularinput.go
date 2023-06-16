@@ -226,6 +226,19 @@ func (mi *ModularInput) Run() (err error) {
 			mi.stanzas = []Stanza{vc.Item}
 		}
 		return mi.runValidation()
+	} else if os.Args[1] == "--interactive" {
+		if ic, err := getInputConfigInteractive(mi); err != nil {
+			mi.Log("FATAL", "Errow when preparing execution configuration interactively: %s", err.Error())
+			return err
+		} else {
+			mi.Log("DEBUG", "Provided input configurations: %+v", ic)
+			mi.hostname = ic.Hostname
+			mi.uri = ic.URI
+			mi.sessionKey = ic.SessionKey
+			mi.checkpointDir = ic.CheckpointDir
+			mi.stanzas = ic.Stanzas
+		}
+		return mi.runStreaming()
 	} else if os.Args[1] == "--example-config" {
 		// This is not part of the standard splunk interface, but it is useful for users to print-out the expected splunk configurations
 		fmt.Println(mi.getExampleConf())
@@ -358,6 +371,9 @@ func (mi *ModularInput) getExampleConf() string {
 	fmt.Fprintf(&sb, "[%s://name-of-input]\n", mi.StanzaName)
 	for _, arg := range mi.Args {
 		fmt.Fprintf(&sb, "# %s - %s\n", arg.Title, arg.Description)
+		if arg.DefaultValue != "" {
+			fmt.Fprintf(&sb, "# Default value: %s\n", arg.DefaultValue)
+		}
 		fmt.Fprintf(&sb, "%s = <%s>\n", arg.Name, arg.DataType)
 	}
 	fmt.Fprint(&sb, "# Standard input configurations\n")

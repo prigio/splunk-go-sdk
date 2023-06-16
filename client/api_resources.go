@@ -5,17 +5,18 @@ package client
 // See: https://docs.splunk.com/Documentation/Splunk/8.1.3/RESTREF/RESTprolog
 
 // pathInfo represents this enpoint https://docs.splunk.com/Documentation/Splunk/8.1.3/RESTREF/RESTintrospect#server.2Finfo
-const pathInfo = "server/info"
+const pathInfo = "/services/server/info"
 
-// InfoResponse is the structure containing the data returned by the pathInfo URL
-type InfoResponse struct {
-	Version              string
-	Build                string
+// InfoResource is the structure containing the data returned by the pathInfo URL
+type InfoResource struct {
+	Version              string `json:"version"`
+	Build                string `json:"build"`
 	CpuArch              string `json:"cpu_arch"`
-	Guid                 string
+	Guid                 string `json:"guid"`
 	HealthInfo           string `json:"health_info"`
-	NumberOfCores        int
-	NumberOfVirtualCores int
+	ServerName           string `json:"serverName"`
+	NumberOfCores        int    `json:"numberOfCores"`
+	NumberOfVirtualCores int    `json:"numberOfVirtualCores"`
 	PhysicalMemoryMB     int    `json:"physicalMemoryMB"`
 	OsBuild              string `json:"os_build"`
 	OsName               string `json:"os_name"`
@@ -23,7 +24,7 @@ type InfoResponse struct {
 }
 
 // pathLogin represents this enpoint https://docs.splunk.com/Documentation/Splunk/8.1.3/RESTREF/RESTaccess#auth.2Flogin
-const pathLogin = "auth/login"
+const pathLogin = "/services/auth/login"
 
 // LoginResponse is the structure containing the data returned by the pathLogin URL
 type LoginResponse struct {
@@ -34,15 +35,18 @@ type LoginResponse struct {
 	// or HTTP 200
 	//	{"sessionKey":"FKPT2miFNvbSStAl68_IywfGIMQSN5hreU^ss....",
 	//	"message":"","code":""}
-	SessionKey string
-	Message    string
-	Code       string
-	Messages   []struct {
-		Type string
-		Code string
-		Text string
-	}
+	SessionKey string `json:"sessionKey"`
+	Message    string `json:"message"`
+	Code       string `json:"code"`
 }
 
-//pathStoragePasswords  represents this enpoint https://docs.splunk.com/Documentation/Splunk/8.1.3/RESTREF/RESTaccess#storage.2Fpasswords
-const pathStoragePasswords = "storage/passwords/"
+// pathStoragePasswords  represents this enpoint https://docs.splunk.com/Documentation/Splunk/8.1.3/RESTREF/RESTaccess#storage.2Fpasswords
+const pathStoragePasswords = "/services/storage/passwords/"
+const pathStoragePasswordsNS = "/servicesNS/%s/%s/storage/passwords/"
+
+type CredentialResource struct {
+	Realm         string `json:"realm"`
+	Username      string `json:"username"`
+	ClearPassword string `json:"clear_password"`
+	EncrPassword  string `json:"encr_password"`
+}
