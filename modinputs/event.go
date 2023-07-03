@@ -47,6 +47,8 @@ func (se *SplunkEvent) writeOut() (cnt int, err error) {
 	}
 }
 
+/*
+
 // writeOutPlain is a private function which allows the modular input to skip counting the events emitted.
 // useful for internal logging, which is not counted.
 func (se *SplunkEvent) writeOutPlain(prependTime bool) (cnt int, err error) {
@@ -58,6 +60,8 @@ func (se *SplunkEvent) writeOutPlain(prependTime bool) (cnt int, err error) {
 		return cnt + 1, nil
 	}
 }
+
+*/
 
 /*
 // getSplunkAsterisksHeader returns a "***SPLUNK*** host=xxx sourcetype=yyy..." header
@@ -93,7 +97,7 @@ func (se *SplunkEvent) xml() (string, error) {
 	// For the xml needed to generate the Scheme it is not important, as that is only done once per execution.
 	// But the events logging is much more time-critical.
 	if se.Data == "" {
-		return "", fmt.Errorf("Events must have at least the data field set to be written to XML.")
+		return "", fmt.Errorf("events must have at least the data field set to be written to XML")
 	}
 
 	buf := new(strings.Builder)
@@ -154,20 +158,21 @@ func (se *SplunkEvent) xml() (string, error) {
 		// the last of a series of unbroken events uses <done/> to signalize the event is now complete
 		buf.WriteString("<done/>")
 	}
-	buf.WriteString("</event>")
+	buf.WriteString("</event>\n")
 
 	return buf.String(), nil
 }
 
+/*
+
 // string generates a plain-text representation of the SplunkEvent.
-//
 //	See https://docs.splunk.com/Documentation/Splunk/8.1.1/AdvancedDev/ModInputsStream
 func (se *SplunkEvent) string(prependTime bool) (string, error) {
 	// It would be easy to use xml.Marshal, but tests revelaed it takes 30% time to generate events than this method
 	// for the xml needed to generate the Scheme it is not important, as that is only done once per execution.
 	// But the events logging is much more time-critical.
 	if se.Data == "" {
-		return "", fmt.Errorf("Events must have at least the data field set to be written out.")
+		return "", fmt.Errorf("events must have at least the data field set to be written out")
 	}
 
 	if prependTime && !se.Time.IsZero() {
@@ -176,3 +181,4 @@ func (se *SplunkEvent) string(prependTime bool) (string, error) {
 		return se.Data, nil
 	}
 }
+*/

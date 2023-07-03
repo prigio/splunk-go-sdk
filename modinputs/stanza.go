@@ -99,6 +99,9 @@ func (s *Stanza) Interval() (ret string) {
 
 // Param represents a single configuration paramenter: a key-value pair as found within inputs.conf
 type Param struct {
+	/*
+	   <param name="param">val</param>
+	*/
 	XMLName xml.Name `xml:"param"`
 	Name    string   `xml:"name,attr"` // name attribute of the param
 	Value   string   `xml:",chardata"` // access the textual data of the param value
@@ -114,6 +117,6 @@ type ParamList struct {
 	   </param_list>
 	*/
 	XMLName xml.Name `xml:"param_list"`
-	Name    string   `xml:"name,attr"`      // name attribute of the param
-	Values  []string `xml:"value,chardata"` // access the textual data of the param value
+	Name    string   `xml:"name,attr"` // name attribute of the param
+	Values  []string `xml:"value"`     // access the textual data of the param value
 }

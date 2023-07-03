@@ -49,3 +49,40 @@ func (mia *InputArg) SetCustomValidation(condition string, errorMessage string) 
 		mia.Validation = fmt.Sprintf("validate(%s,\"%s\")", condition, strings.ReplaceAll(errorMessage, `"`, "'"))
 	}
 }
+
+// getInputsSpec returns a string which can be used to describe the parameter within splunk's README/inputs.conf.spec file
+func (mia *InputArg) getInputsSpec() string {
+	buf := new(strings.Builder)
+	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
+	buf.Grow(512)
+
+	fmt.Fprintf(buf, `%s = <%s>
+*  %s: %s
+*  Default value: "%s"
+`, mia.Name, mia.DataType, mia.Title, strings.ReplaceAll(mia.Description, "\n", " "), strings.ReplaceAll(mia.DefaultValue, "\n", " "))
+
+	if len(mia.Validation) > 0 {
+		fmt.Fprintf(buf, "* Custom validation: %s", mia.Validation)
+	}
+	return buf.String()
+}
+
+// getInputsConf returns a string which can be used to describe the parameter within splunk's defaault/inputs.conf file
+func (mia *InputArg) getInputsConf() string {
+	buf := new(strings.Builder)
+	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
+	buf.Grow(512)
+
+	fmt.Fprintf(buf, `#  %s: %s
+#  Data type: %s
+#  Default value: "%s"
+`, mia.Title, strings.ReplaceAll(mia.Description, "\n", " "), mia.DataType, mia.DefaultValue)
+
+	if len(mia.Validation) > 0 {
+		fmt.Fprintf(buf, "# Custom validation: %s\n", mia.Validation)
+	}
+
+	fmt.Fprintf(buf, "%s = %s\n", mia.Name, strings.ReplaceAll(mia.DefaultValue, "\n", "\\\n"))
+
+	return buf.String()
+}

@@ -61,12 +61,12 @@ func getInputConfigFromXML(input io.Reader) (*inputConfig, error) {
 	}
 	buf := new(bytes.Buffer)
 	if _, err := buf.ReadFrom(input); err != nil {
-		return nil, fmt.Errorf("getInputConfigFromXML: %s.", err.Error())
+		return nil, fmt.Errorf("getInputConfigFromXML: %w", err)
 	}
 	// parse and load the XML data within the inputConfig data structure
 	ic := &inputConfig{}
 	if err := xml.Unmarshal(buf.Bytes(), ic); err != nil {
-		return nil, fmt.Errorf("getInputConfigFromXML: error when parsing input configuration xml. %s. %s", err.Error(), strings.ReplaceAll(buf.String(), "\n", "\\n"))
+		return nil, fmt.Errorf("getInputConfigFromXML: error when parsing input configuration xml. %w. %s", err, strings.ReplaceAll(buf.String(), "\n", "\\n"))
 	}
 	return ic, nil
 }
@@ -85,9 +85,12 @@ func getInputConfigInteractive(mi *ModularInput) (*inputConfig, error) {
 	username := askForInput("Splunk username", "admin", false)
 	password := askForInput("Splunk password", "", true)
 
-	ss, err := client.NewSplunkServiceWithUsernameAndPassword(ic.URI, username, password, "", true)
+	ss, err := client.New(ic.URI, true, "")
 	if err != nil {
-		return nil, fmt.Errorf("connection failed to splunkd on '%s' with username '%s': %s", ic.URI, username, err.Error())
+		return nil, fmt.Errorf("connection failed to splunkd on '%s': %w", ic.URI, err)
+	}
+	if err := ss.Login(username, password, ""); err != nil {
+		return nil, fmt.Errorf("login failed to splunkd on '%s' with username '%s': %w", ic.URI, username, err)
 	}
 	ic.SessionKey = ss.GetSessionKey()
 
@@ -154,15 +157,15 @@ func getValidationConfigFromXML(input io.Reader) (*validationConfig, error) {
 	}
 	buf := new(bytes.Buffer)
 	if cnt, err := buf.ReadFrom(os.Stdin); err != nil {
-		return nil, fmt.Errorf("getValidationConfigFromXML: %s.", err.Error())
+		return nil, fmt.Errorf("getValidationConfigFromXML: %w", err)
 	} else if cnt < 10 {
 		// additionally check for data which is waaaay too small to be parsed.
-		return nil, fmt.Errorf("getValidationConfigFromXML: error xmldata too small.")
+		return nil, fmt.Errorf("getValidationConfigFromXML: error xmldata too small")
 	}
 	// parse and load the XML data within the ModInputConfig data structure
 	vc := &validationConfig{}
 	if err := xml.Unmarshal(buf.Bytes(), vc); err != nil {
-		return nil, fmt.Errorf("getValidationConfigFromXML: error when parsing validation xml. %s. %s", err.Error(), strings.ReplaceAll(buf.String(), "\n", " "))
+		return nil, fmt.Errorf("getValidationConfigFromXML: error when parsing validation xml. %w. %s", err, strings.ReplaceAll(buf.String(), "\n", " "))
 	}
 	return vc, nil
 }

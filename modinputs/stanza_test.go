@@ -9,10 +9,10 @@ func TestParameterRetrieval(t *testing.T) {
 		Name: "teststz://t1",
 		App:  "testapp",
 		Params: []Param{
-			Param{Name: "p1", Value: "v1"},
-			Param{Name: "source", Value: "src"},
-			Param{Name: "index", Value: "main"},
-			Param{Name: "sourcetype", Value: "st"},
+			{Name: "p1", Value: "v1"},
+			{Name: "source", Value: "src"},
+			{Name: "index", Value: "main"},
+			{Name: "sourcetype", Value: "st"},
 		},
 	}
 	if s.Index() != "main" {
@@ -35,10 +35,10 @@ func TestSchemeAndInputName(t *testing.T) {
 		Name: "teststz://t1",
 		App:  "testapp",
 		Params: []Param{
-			Param{Name: "p1", Value: "v1"},
-			Param{Name: "source", Value: "src"},
-			Param{Name: "index", Value: "main"},
-			Param{Name: "sourcetype", Value: "st"},
+			{Name: "p1", Value: "v1"},
+			{Name: "source", Value: "src"},
+			{Name: "index", Value: "main"},
+			{Name: "sourcetype", Value: "st"},
 		},
 	}
 	if s.Scheme() != "teststz" {

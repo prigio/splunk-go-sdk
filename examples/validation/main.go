@@ -42,7 +42,7 @@ func streamEvents(mi *modinputs.ModularInput, stanza *modinputs.Stanza) error {
 func main() {
 	script := &modinputs.ModularInput{
 		Title:                 "Go SDK test",
-		Description:           "Tests if an the golang modular inputs sdk works properly",
+		Description:           "Tests if the golang modular inputs sdk works properly",
 		StanzaName:            "gosdkcheck",
 		UseExternalValidation: true,
 		UseSingleInstance:     false,
@@ -53,6 +53,7 @@ func main() {
 	script.EnableDebug()
 	script.AddArgument("param1", "Param1", "A string parameter", modinputs.ArgDataTypeStr, "", true, true)
 	script.AddArgument("debug", "Debug", "", modinputs.ArgDataTypeBool, "", true, true)
+	script.SetDefaultSourcetype("gosdkcheck")
 	// Start actual execution
 	err := script.Run()
 	if err != nil {

@@ -35,12 +35,11 @@ func main() {
 	}
 	script.EnableDebug()
 	script.AddArgument("text", "Text to input", "Description of text input", modinputs.ArgDataTypeStr, "", true, true)
-
+	script.SetDefaultSourcetype("helloworld")
 	// Start actual execution
 	err := script.Run()
 	if err != nil {
 		// this will NOT run deferred function, so in case we have any, need to take care about that. Simply: do NOT use such functions within the main() ;-)
 		os.Exit(1)
 	}
-	return
 }
