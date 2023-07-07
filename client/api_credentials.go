@@ -3,7 +3,6 @@ package client
 import (
 	"fmt"
 	"net/url"
-	"strings"
 )
 
 // This file provides structs used to parse the JSON-formatted output of the Splunk REST API
@@ -38,41 +37,20 @@ func NewCredentialsCollection(ss *SplunkService) *CredentialsCollection {
 
 }
 
-func (col *CredentialsCollection) CreateCred(user, realm, password string) (CredentialResource, AccessControlList, error) {
-
-	fullUrl, _ := url.JoinPath("services", col.path)
-
+func (col *CredentialsCollection) CreateCred(user, realm, password string) (*collectionEntry[CredentialResource], error) {
 	credPostParams := url.Values{}
 	credPostParams.Set("name", user)
 	credPostParams.Set("password", password)
 	if realm != "" {
 		credPostParams.Set("realm", realm)
 	}
-
-	httpCode, respBody, err := col.splunkd.doHttpRequest("POST", fullUrl, nil, strings.NewReader(credPostParams.Encode()))
-
-	if err != nil {
-		return CredentialResource{}, AccessControlList{}, fmt.Errorf("%s create: %w", col.name, err)
-	}
-	cred := NewCredentialsCollection(col.splunkd)
-	err = cred.parseResponse(httpCode, respBody)
-	if err != nil {
-		return CredentialResource{}, AccessControlList{}, fmt.Errorf("%s create: %w", col.name, err)
-	}
-
-	return cred.Entries[0].Content, cred.Entries[0].ACL, nil
+	entryId := urlEncodeCredential(user, realm)
+	return col.Create(entryId, &credPostParams)
 }
 
-func (col *CredentialsCollection) GetCred(user, realm string) (CredentialResource, AccessControlList, error) {
-
+func (col *CredentialsCollection) GetCred(user, realm string) (*collectionEntry[CredentialResource], error) {
 	entryId := urlEncodeCredential(user, realm)
-
-	cred, err := col.Get(entryId)
-
-	if err != nil {
-		return CredentialResource{}, AccessControlList{}, fmt.Errorf("%s GetCredential: %w", col.name, err)
-	}
-	return cred.Content, cred.ACL, nil
+	return col.Get(entryId)
 }
 
 func (col *CredentialsCollection) UpdateCred(user, realm, newPassword string) error {
@@ -94,44 +72,3 @@ func (col *CredentialsCollection) UpdateCredACL(user, realm string, aclParams *u
 	entryId := urlEncodeCredential(user, realm)
 	return col.UpdateACL(entryId, aclParams)
 }
-
-/*
-func (ss *SplunkService) setCredential(user, realm, password string) (Credential, error) {
-	var fullUrl string
-	var resp *http.Response
-	//var httpCode int
-	//var respBody []byte
-	var err error
-	credParams := url.Values{}
-
-	_, err = ss.getCredential(user, realm)
-	if err != nil {
-		// no credential present, let's create one
-		// Submit credentials form
-		credParams.Set("name", user)
-		credParams.Set("password", password)
-		if realm != "" {
-			credParams.Set("realm", realm)
-		}
-		if resp, err = ss.httpClient.PostForm(ss.buildUrl(pathStoragePasswords), credParams); err != nil {
-			return Credential{}, fmt.Errorf("splunk service setCredential: %s", err.Error())
-		} else {
-			fmt.Println(resp.StatusCode)
-		}
-	} else {
-		// credential IS present, need to update it
-		if realm != "" {
-			fullUrl = fmt.Sprintf("%s/%s:%s:", pathStoragePasswords, realm, user)
-		} else {
-			fullUrl = fmt.Sprintf("%s/%s", pathStoragePasswords, user)
-		}
-
-		credParams.Set("password", password)
-
-		if _, err = ss.httpClient.PostForm(ss.buildUrl(fullUrl), credParams); err != nil {
-			return Credential{}, fmt.Errorf("splunk service setCredential: %s", err.Error())
-		}
-	}
-	return Credential{}, nil
-}
-*/

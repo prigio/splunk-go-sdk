@@ -35,14 +35,8 @@ func (ss *SplunkService) AuthContext() (*ContextResource, error) {
 	}
 
 	// pathInfo represents this enpoint https://docs.splunk.com/Documentation/Splunk/8.1.3/RESTREF/RESTintrospect#server.2Finfo
-	httpCode, respBody, err := ss.doHttpRequest("GET", "/services/authentication/current-context", nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("%s list: %w", col.name, err)
-	}
-
-	err = col.parseResponse(httpCode, respBody)
-	if err != nil {
-		return nil, fmt.Errorf("%s list: %w", col.name, err)
+	if err := doSplunkdHttpRequest(ss, "GET", "/services/authentication/current-context", nil, nil, "", &col); err != nil {
+		return nil, fmt.Errorf("auth-context list: %w", err)
 	}
 
 	ss.authContext = &col.Entries[0].Content

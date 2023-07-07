@@ -70,6 +70,127 @@ func TestConfigsSourcetypes(t *testing.T) {
 
 }
 
+func TestConfigResourceGetString(t *testing.T) {
+	cr := make(ConfigResource, 0)
+
+	cr["keyStr"] = "somestring"
+	vStr, err := cr.GetString("keyStr")
+	if err != nil {
+		t.Errorf("ConfigResource map: %s", err.Error())
+	} else if vStr != "somestring" {
+		t.Errorf("ConfigResource map: wrong string value retrieved. Expected '%s', actual: '%s'", "somestring", vStr)
+	}
+
+	cr["keyInt"] = 1
+	vStr, err = cr.GetString("keyInt")
+	if err != nil {
+		t.Errorf("ConfigResource map: %s", err.Error())
+	} else if vStr != "1" {
+		t.Errorf("ConfigResource map: wrong string value retrieved. Expected '%d', actual: '%s'", 1, vStr)
+	}
+
+	cr["keyIntAsString"] = "1"
+	vStr, err = cr.GetString("keyIntAsString")
+	if err != nil {
+		t.Errorf("ConfigResource map: %s", err.Error())
+	} else if vStr != "1" {
+		t.Errorf("ConfigResource map: wrong string value retrieved")
+	}
+
+	cr["keyFloat32"] = float32(3.14)
+	vStr, err = cr.GetString("keyFloat32")
+	if err != nil {
+		t.Errorf("ConfigResource map: %s", err.Error())
+	} else if vStr != "3.14" {
+		t.Errorf("ConfigResource map: wrong string value retrieved from '%s'. Expected '%v', actual '%v'", "keyFloat32", 3, vStr)
+	}
+
+}
+
+func TestConfigResourceGetInt(t *testing.T) {
+	cr := make(ConfigResource, 0)
+
+	cr["keyStr"] = "somestring"
+	_, err = cr.GetInt("keyStr")
+	if err == nil {
+		t.Errorf("ConfigResource map: incorrect nil error return value when trying to read string '%v' as int", cr["keyStr"])
+	}
+
+	cr["keyInt"] = 1
+	vInt, err := cr.GetInt("keyInt")
+	if err != nil {
+		t.Errorf("ConfigResource map: %s", err.Error())
+	}
+	if vInt != 1 {
+		t.Errorf("ConfigResource map: wrong string value retrieved. Expected '%d', actual: '%d'", 1, vInt)
+	}
+
+	cr["keyIntAsString"] = "1"
+	vInt, err = cr.GetInt("keyIntAsString")
+	if err != nil {
+		t.Errorf("ConfigResource map: %s", err.Error())
+	} else if vInt != 1 {
+		t.Errorf("ConfigResource map: wrong int value retrieved")
+	}
+
+	cr["keyFloat32"] = float32(3.14)
+	vInt, err = cr.GetInt("keyFloat32")
+	if err != nil {
+		t.Errorf("ConfigResource map: %s", err.Error())
+	} else if vInt != 3 {
+		t.Errorf("ConfigResource map: wrong int value retrieved from '%s'. Expected '%v', actual '%v'", "keyFloat32", 3, vInt)
+	}
+
+	cr["keyFloatAsString"] = "3.14"
+	vInt, err = cr.GetInt("keyFloatAsString")
+	if err == nil {
+		t.Errorf("ConfigResource map: expecting error when trying to parse string-based float valut to int. found nil")
+	}
+}
+
+func TestConfigResourceGetFloat(t *testing.T) {
+	cr := make(ConfigResource, 0)
+
+	cr["keyStr"] = "somestring"
+	_, err = cr.GetFloat("keyStr")
+	if err == nil {
+		t.Errorf("ConfigResource map: incorrect nil error return value when trying to read string '%v' as float", cr["keyStr"])
+	}
+
+	cr["keyInt"] = 1
+	vFloat, err := cr.GetFloat("keyInt")
+	if err != nil {
+		t.Errorf("ConfigResource map: %s", err.Error())
+	}
+	if vFloat != 1 {
+		t.Errorf("ConfigResource map: wrong string value retrieved. Expected '%d', actual: '%v'", 1, vFloat)
+	}
+
+	cr["keyIntAsString"] = "1"
+	vFloat, err = cr.GetFloat("keyIntAsString")
+	if err != nil {
+		t.Errorf("ConfigResource map: %s", err.Error())
+	} else if vFloat != 1 {
+		t.Errorf("ConfigResource map: wrong float value retrieved")
+	}
+
+	cr["keyFloat32"] = float32(3.14)
+	vFloat, err = cr.GetFloat("keyFloat32")
+	if err != nil {
+		t.Errorf("ConfigResource map: %s", err.Error())
+	} else if vFloat != 3.14 {
+		t.Errorf("ConfigResource map: wrong float value retrieved from '%s'. Expected '%v', actual '%v'", "keyFloat32", 3.14, vFloat)
+	}
+
+	cr["keyFloatAsString"] = "3.14"
+	vFloat, err = cr.GetFloat("keyFloatAsString")
+	if err != nil {
+		t.Errorf("ConfigResource map: %s", err.Error())
+	} else if vFloat != 3.14 {
+		t.Errorf("ConfigResource map: wrong float value retrieved from '%s'. Expected '%v', actual '%v'", "keyFloatAsString", 3.14, vFloat)
+	}
+}
+
 /*
 func TestConfigCustom(t *testing.T) {
 	newConfig := uuid.New().String()[0:8] + "-paolo"

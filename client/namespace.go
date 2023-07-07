@@ -45,5 +45,13 @@ func NewNamespace(owner, app string, sharing SplunkSharing) (*NameSpace, error) 
 }
 
 func (ns *NameSpace) GetServicesNSUrl() string {
-	return "/servicesNS/" + ns.owner + "/" + ns.app + "/"
+	o := ns.owner
+	a := ns.app
+	if o == "" {
+		o = "-"
+	}
+	if a == "" {
+		a = "-"
+	}
+	return "/servicesNS/" + o + "/" + a + "/"
 }

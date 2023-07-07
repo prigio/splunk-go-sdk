@@ -1,7 +1,6 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -9,11 +8,38 @@ import (
 
 // collectionEntry represents one entry returned by a collection after invoking the API
 type collectionEntry[T any] struct {
-	Name    string            `json:"name"`
-	Id      string            `json:"id"`
-	Author  string            `json:"author"`
+	Name   string `json:"name"`
+	Id     string `json:"id"`
+	Author string `json:"author"`
+	Links  struct {
+		// more info on the provided links under:
+		//    https://docs.splunk.com/Documentation/Splunk/9.0.5/RESTUM/RESTusing#Atom_Feed_response
+		List   string `json:"list"`
+		Remove string `json:"remove"`
+	} `json:"links"`
 	ACL     AccessControlList `json:"acl"`
 	Content T                 `json:"content"`
+}
+
+func (ce *collectionEntry[T]) Delete(ss *SplunkService) error {
+	if ce.Links.Remove == "" {
+		return fmt.Errorf("%T delete: '%s' cannot be deleted", ce, ce.Name)
+	}
+	if err := doSplunkdHttpRequest(ss, "DELETE", ce.Links.Remove, nil, nil, "", &discardBody{}); err != nil {
+		return fmt.Errorf("%T delete: '%s' cannot be deleted: %w", ce, ce.Name, err)
+	}
+	return nil
+}
+
+func getUrl(collectionPath, entry string) string {
+	var fullUrl string
+
+	if strings.HasPrefix(collectionPath, "/services") {
+		fullUrl, _ = url.JoinPath(collectionPath, entry)
+	} else {
+		fullUrl, _ = url.JoinPath("/services", collectionPath, entry)
+	}
+	return fullUrl
 }
 
 // collection represents a collection of entries regarding an API endpoint
@@ -29,144 +55,125 @@ type collection[T any] struct {
 	// name is the internal name used to refer to this collection[T]. Mostly used for error management purposes
 	name string
 	// path represents the part of URL after services/ or servicesNS/user/app/ to access the resources of the collection
-	path    string
+	path string
+
 	Entries []collectionEntry[T] `json:"entry"`
 
 	splunkd *SplunkService
 }
 
-func (col *collection[T]) List() ([]collectionEntry[T], error) {
+func (col *collection[T]) isInitialized() error {
 	if col.path == "" || col.name == "" || col.splunkd == nil {
-		return nil, fmt.Errorf("list: uninitialized collection. Use a New... method to properly initialize the collection")
+		return fmt.Errorf("uninitialized collection. Use a New... method to properly initialize internal parameters")
 	}
+	return nil
+}
 
-	httpCode, respBody, err := col.splunkd.doHttpRequest("GET", "services/"+col.path, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("%s list: %w", col.name, err)
+func (col *collection[T]) List() ([]collectionEntry[T], error) {
+	if err := col.isInitialized(); err != nil {
+		return nil, fmt.Errorf("list: %w", err)
 	}
-	err = col.parseResponse(httpCode, respBody)
-	if err != nil {
+	fullUrl := getUrl(col.path, "")
+
+	if err := doSplunkdHttpRequest(col.splunkd, "GET", fullUrl, nil, nil, "", &col); err != nil {
 		return nil, fmt.Errorf("%s list: %w", col.name, err)
 	}
 	return col.Entries, nil
 }
 
-func (col *collection[T]) Get(entryId string) (collectionEntry[T], error) {
-	if col.path == "" || col.name == "" || col.splunkd == nil {
-		return collectionEntry[T]{}, fmt.Errorf("get: uninitialized collection. Use a New... method to properly initialize the collection")
-	}
-	var fullUrl string
-
-	if strings.HasPrefix(entryId, "http") {
-		// entryId is an absolute URL, including protocol, server
-		fullUrl = entryId
-	} else {
-		fullUrl, _ = url.JoinPath("services", col.path, entryId)
-	}
-	httpCode, respBody, err := col.splunkd.doHttpRequest("GET", fullUrl, nil, nil)
-
-	if err != nil {
-		return collectionEntry[T]{}, fmt.Errorf("%s get: %w", col.name, err)
+func (col *collection[T]) Get(entryName string) (*collectionEntry[T], error) {
+	if err := col.isInitialized(); err != nil {
+		return nil, fmt.Errorf("get: %w", err)
 	}
 
+	fullUrl := getUrl(col.path, entryName)
 	tmpCol := collection[T]{}
-	err = tmpCol.parseResponse(httpCode, respBody)
-	if err != nil {
-		return collectionEntry[T]{}, fmt.Errorf("%s get: %w", col.name, err)
+	if err := doSplunkdHttpRequest(col.splunkd, "GET", fullUrl, nil, nil, "", &tmpCol); err != nil {
+		return nil, fmt.Errorf("%s get: %w", col.name, err)
 	}
-
-	return tmpCol.Entries[0], nil
+	return &tmpCol.Entries[0], nil
 }
 
-func (col *collection[T]) Create(entry string, params *url.Values) (*collectionEntry[T], error) {
-	if col.path == "" || col.name == "" || col.splunkd == nil {
-		return nil, fmt.Errorf("create: uninitialized collection. Use a New... method to properly initialize the collection")
+func (col *collection[T]) Create(entryName string, params *url.Values) (*collectionEntry[T], error) {
+	if err := col.isInitialized(); err != nil {
+		return nil, fmt.Errorf("create: %w", err)
 	}
 	if params == nil || len(*params) == 0 {
-		return nil, fmt.Errorf("%s create: cannot create entry without any properties. entry='%s'", col.name, entry)
+		return nil, fmt.Errorf("%s create: cannot create entry without any properties. entry='%s'", col.name, entryName)
 	}
 
-	fullUrl, _ := url.JoinPath("services", col.path)
+	fullUrl := getUrl(col.path, "")
 
-	httpCode, respBody, err := col.splunkd.doHttpRequest("POST", fullUrl, nil, strings.NewReader(params.Encode()))
-
-	if err != nil {
+	tmpCol := collection[T]{}
+	if err := doSplunkdHttpRequest(col.splunkd, "POST", fullUrl, nil, []byte(params.Encode()), "", &tmpCol); err != nil {
 		return nil, fmt.Errorf("%s create: %w", col.name, err)
+	}
+	return &tmpCol.Entries[0], nil
+}
+
+func (col *collection[T]) CreateNS(ns *NameSpace, entryName string, params *url.Values) (*collectionEntry[T], error) {
+	if err := col.isInitialized(); err != nil {
+		return nil, fmt.Errorf("createNS: %w", err)
+	}
+	if params == nil || len(*params) == 0 {
+		return nil, fmt.Errorf("%s createNS: cannot create entry without any properties. entry='%s'", col.name, entryName)
+	}
+	if ns == nil {
+		return nil, fmt.Errorf("%s createNS: namespace parameter cannot be nil. entry='%s'", col.name, entryName)
+	}
+	var fullUrl string
+	if strings.HasPrefix(col.path, "/servicesNS/") {
+		//col.path is like  "/servicesNS/user/app/some/other/stuff"
+		//i want to have a result like: "" servicesNS, user, app, some/other/stuff
+		path := strings.SplitAfterN(col.path, "/", 5)[4]
+		fullUrl, _ = url.JoinPath(ns.GetServicesNSUrl(), path)
+	} else {
+		fullUrl, _ = url.JoinPath(ns.GetServicesNSUrl(), col.path)
 	}
 	tmpCol := collection[T]{}
-	err = tmpCol.parseResponse(httpCode, respBody)
-	if err != nil {
-		return nil, fmt.Errorf("%s create: %w", col.name, err)
+
+	if err := doSplunkdHttpRequest(col.splunkd, "POST", fullUrl, nil, []byte(params.Encode()), "", &tmpCol); err != nil {
+		return nil, fmt.Errorf("%s createNS: %w", col.name, err)
 	}
 
 	return &tmpCol.Entries[0], nil
 }
 
-func (col *collection[T]) Update(entryId string, params *url.Values) error {
-	if col.path == "" || col.name == "" || col.splunkd == nil {
-		return fmt.Errorf("update: uninitialized collection. Use a New... method to properly initialize the collection")
+func (col *collection[T]) Update(entryName string, params *url.Values) error {
+	if err := col.isInitialized(); err != nil {
+		return fmt.Errorf("update: %w", err)
 	}
 
-	var fullUrl string
+	fullUrl := getUrl(col.path, entryName)
 
-	if strings.HasPrefix(entryId, "http") {
-		// entryId is an absolute URL, including protocol, server
-		fullUrl = entryId
-	} else {
-		fullUrl, _ = url.JoinPath("services", col.path, entryId)
-	}
-
-	httpCode, respBody, err := col.splunkd.doHttpRequest("POST", fullUrl, nil, strings.NewReader(params.Encode()))
-
-	if err != nil {
+	if err := doSplunkdHttpRequest(col.splunkd, "POST", fullUrl, nil, []byte(params.Encode()), "", &discardBody{}); err != nil {
 		return fmt.Errorf("%s update: %w", col.name, err)
-	}
-	if httpCode >= 400 {
-		return fmt.Errorf("%s update: HTTP %v - %s", col.name, httpCode, string(respBody))
 	}
 	return nil
 }
 
-func (col *collection[T]) Delete(entryId string) error {
-	if col.path == "" || col.name == "" || col.splunkd == nil {
-		return fmt.Errorf("delete: uninitialized collection. Use a New... method to properly initialize the collection")
+func (col *collection[T]) Delete(entryName string) error {
+	if err := col.isInitialized(); err != nil {
+		return fmt.Errorf("delete: %w", err)
 	}
 
-	var fullUrl string
-
-	if strings.HasPrefix(entryId, "http") {
-		// entryId is an absolute URL, including protocol, server
-		fullUrl = entryId
-	} else {
-		fullUrl, _ = url.JoinPath("services", col.path, entryId)
-	}
-
-	httpCode, respBody, err := col.splunkd.doHttpRequest("DELETE", fullUrl, nil, nil)
-	if err != nil {
+	fullUrl := getUrl(col.path, entryName)
+	if err := doSplunkdHttpRequest(col.splunkd, "DELETE", fullUrl, nil, nil, "", &discardBody{}); err != nil {
 		return fmt.Errorf("%s delete: %w", col.name, err)
 	}
-	if httpCode >= 400 {
-		return fmt.Errorf("%s delete: HTTP %v - %s", col.name, httpCode, string(respBody))
-	}
+
 	return nil
 }
 
 // https://docs.splunk.com/Documentation/Splunk/9.0.5/RESTUM/RESTusing#Access_Control_List
-func (col *collection[T]) UpdateACL(entryId string, aclParams *url.Values) error {
-	if col.path == "" || col.name == "" || col.splunkd == nil {
-		return fmt.Errorf("updateACL: uninitialized collection. Use a New... method to properly initialize the collection")
+func (col *collection[T]) UpdateACL(entryName string, aclParams *url.Values) error {
+	if err := col.isInitialized(); err != nil {
+		return fmt.Errorf("updateACL: %w", err)
 	}
 
-	var fullUrl string
+	fullUrl := getUrl(col.path, entryName) + "/acl"
 
-	if strings.HasPrefix(entryId, "http") {
-		// entryId is an absolute URL, including protocol, server
-		fullUrl, _ = url.JoinPath(entryId, "acl")
-	} else {
-		fullUrl, _ = url.JoinPath("services", col.path, entryId, "acl")
-	}
-
-	currentEntry, err := col.Get(entryId)
+	currentEntry, err := col.Get(entryName)
 	if err != nil {
 		return fmt.Errorf("%s updateACL: %w", col.name, err)
 	}
@@ -209,26 +216,8 @@ func (col *collection[T]) UpdateACL(entryId string, aclParams *url.Values) error
 		aclParams.Set("perms.write", strings.Join((*aclParams)["perms.write"], ", "))
 	}
 
-	httpCode, respBody, err := col.splunkd.doHttpRequest("POST", fullUrl, nil, strings.NewReader(aclParams.Encode()))
-
-	if err != nil {
+	if err := doSplunkdHttpRequest(col.splunkd, "POST", fullUrl, nil, []byte(aclParams.Encode()), "", &discardBody{}); err != nil {
 		return fmt.Errorf("%s updateACL: %w", col.name, err)
-	}
-	if httpCode >= 400 {
-		return fmt.Errorf("%s updateACL: HTTP %v - %s", col.name, httpCode, string(respBody))
-	}
-	return nil
-}
-
-func (col *collection[T]) parseResponse(httpCode int, httpRespBody []byte) error {
-	if httpCode >= 400 {
-		// HTTP 401
-		// {"messages":[{"type":"WARN","text":"call not properly authenticated"}]}%
-		return fmt.Errorf("%s: HTTP %v - %s", col.name, httpCode, string(httpRespBody))
-	}
-
-	if err := json.Unmarshal(httpRespBody, col); err != nil {
-		return fmt.Errorf("%s: %w", col.name, err)
 	}
 	return nil
 }

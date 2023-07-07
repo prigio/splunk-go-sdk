@@ -11,6 +11,7 @@ func TestInfo(t *testing.T) {
 	}
 	ss.Login(testing_user, testing_password, testing_mfaCode)
 
+	t.Log("INFO Retrieving data from INFO endpoint")
 	ir, err := ss.Info()
 	if err != nil {
 		t.Error(err)

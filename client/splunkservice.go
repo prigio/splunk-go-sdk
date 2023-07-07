@@ -3,9 +3,6 @@ package client
 import (
 	"crypto/tls"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -29,19 +26,12 @@ type SplunkService struct {
 	nameSpace   NameSpace
 	httpClient  *http.Client
 	credentials *CredentialsCollection
+	kvstore     *KVStoreCollCollection
 	// context of the current authenticated session. Provides info about the logged-in username, roles, etc
 	authContext *ContextResource
+	configs     map[string]*ConfigsCollection
 	// information about the splunk version, server where splunk is deployed, ...
 	info *InfoResource
-}
-
-func isReachable(target url.URL) error {
-	if conn, err := net.DialTimeout("tcp", target.Host, 500*time.Millisecond); err != nil {
-		return err
-	} else {
-		conn.Close()
-	}
-	return nil
 }
 
 func New(serviceUrl string, insecureSkipVerify bool, proxy string) (*SplunkService, error) {
@@ -115,54 +105,6 @@ func (ss *SplunkService) GetSessionKey() string {
 	return ss.sessionKey
 }
 
-/*
-// newHttpRequest returns a new http.Request object configured according to the specific needs (headers etc	)
-func (ss *SplunkService) newHttpRequest(method, urlPath string, body io.Reader) (*http.Request, error) {
-	var r *http.Request
-	var err error
-
-	r, err = http.NewRequest(method, ss.buildUrl(urlPath), body)
-	if err != nil {
-		return nil, err
-	}
-	// type Header map[string][]string
-	r.Header["Authorization"] = append(r.Header["Authorization"], "Splunk "+ss.sessionKey)
-	return r, nil
-}
-*/
-
-// doHttpRequest executes the specified request and returns http code, the body contents and possibly an error
-func (ss *SplunkService) doHttpRequest(method, urlPath string, urlParams *url.Values, body io.Reader) (httpCode int, respBody []byte, err error) {
-	var fullUrl string
-	var req *http.Request
-	var resp *http.Response
-
-	fullUrl = buildSplunkdUrl(ss.baseUrl, urlPath, urlParams)
-
-	req, err = http.NewRequest(method, fullUrl, body)
-	if err != nil {
-		return 0, nil, err
-	}
-	// type Header map[string][]string
-	// https://docs.splunk.com/Documentation/Splunk/8.1.3/Security/UseAuthTokens
-	if ss.sessionKey != "" {
-		req.Header["Authorization"] = append(req.Header["Authorization"], "Splunk "+ss.sessionKey)
-	} else if ss.authToken != "" {
-		req.Header["Authorization"] = append(req.Header["Authorization"], "Bearer "+ss.authToken)
-	}
-
-	//log.Printf("DEBUG [splunk service]: performing HTTP %s %s", req.Method, req.URL.Path)
-	if resp, err = ss.httpClient.Do(req); err != nil {
-		//log.Debug("splunk service: HTTP %s %s: %s", req.Method, req.URL.Path, err.Error())
-		return 0, nil, err
-	}
-	defer resp.Body.Close()
-	respBody, _ = ioutil.ReadAll(resp.Body)
-
-	//log.Debug("splunk service: HTTP %s %s: %d", req.Method, req.URL.Path, resp.StatusCode)
-	return resp.StatusCode, respBody, nil
-}
-
 //func (ss *SplunkService) getCollection(method, urlPath string, body io.Reader) (httpCode int, respBody []byte, err error) {
 
 // SetNameSpace updates the NameSpace configurations for the session
@@ -180,4 +122,26 @@ func (ss *SplunkService) GetCredentials() *CredentialsCollection {
 		ss.credentials = NewCredentialsCollection(ss)
 	}
 	return ss.credentials
+}
+
+func (ss *SplunkService) GetKVStore() *KVStoreCollCollection {
+	if ss.kvstore == nil {
+		ss.kvstore = NewKVStoreCollCollection(ss)
+	}
+	return ss.kvstore
+}
+
+func (ss *SplunkService) GetConfigs(filename string) *ConfigsCollection {
+	if ss.configs == nil {
+		ss.configs = make(map[string]*ConfigsCollection)
+	}
+	if filename == "" {
+		return nil
+	}
+	c, ok := ss.configs[filename]
+	if ok && c != nil {
+		return c
+	}
+	ss.configs[filename] = NewConfigsCollection(ss, filename)
+	return ss.configs[filename]
 }

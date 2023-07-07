@@ -23,24 +23,24 @@ func TestCredentialNoRealm(t *testing.T) {
 	credPassword := "this is a password"
 
 	t.Logf("INFO Creating credential realm='' user='%s'", credNoRealm)
-	cr, _, err := credentials.CreateCred(credNoRealm, "", credPassword)
+	cr, err := credentials.CreateCred(credNoRealm, "", credPassword)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
 
-	if cr.Username != credNoRealm {
+	if cr.Content.Username != credNoRealm {
 		t.Errorf("Invalid credential returned. %+v", cr)
 	}
 
 	// retrieve the new credential
 	t.Logf("INFO Retrieving credential realm='' user='%s'", credNoRealm)
-	cr2, _, err := credentials.GetCred(credNoRealm, "")
+	cr2, err := credentials.GetCred(credNoRealm, "")
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
-	if cr2.Username != credNoRealm || cr2.ClearPassword != credPassword {
+	if cr2.Content.Username != credNoRealm || cr2.Content.ClearPassword != credPassword {
 		t.Errorf("Invalid credential returned. %+v", cr2)
 	}
 	// update password of new credential
@@ -51,13 +51,13 @@ func TestCredentialNoRealm(t *testing.T) {
 	}
 
 	// Retrieve the updated credential and check its password
-	cr3, _, err := credentials.GetCred(credNoRealm, "")
+	cr3, err := credentials.GetCred(credNoRealm, "")
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
 
-	if cr3.ClearPassword != updatedCredPassword {
+	if cr3.Content.ClearPassword != updatedCredPassword {
 		t.Errorf("Password not updated. %+v", cr3)
 	}
 
@@ -86,24 +86,24 @@ func TestCredentialWithRealm(t *testing.T) {
 	credPassword := "this is a password"
 
 	t.Logf("INFO Creating credential realm='%s' user='%s'", credRealm, credWithRealm)
-	cr, _, err := credentials.CreateCred(credWithRealm, credRealm, credPassword)
+	cr, err := credentials.CreateCred(credWithRealm, credRealm, credPassword)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
 
-	if cr.Username != credWithRealm {
+	if cr.Content.Username != credWithRealm {
 		t.Errorf("Invalid credential returned. %+v", cr)
 	}
 
 	// retrieve the new credential
 	t.Logf("INFO Retrieving credential realm='%s' user='%s'", credRealm, credWithRealm)
-	cr2, _, err := credentials.GetCred(credWithRealm, credRealm)
+	cr2, err := credentials.GetCred(credWithRealm, credRealm)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
-	if cr2.Username != credWithRealm || cr2.ClearPassword != credPassword {
+	if cr2.Content.Username != credWithRealm || cr2.Content.ClearPassword != credPassword {
 		t.Errorf("Invalid credential returned. %+v", cr2)
 	}
 	// update password of new credential
@@ -114,13 +114,13 @@ func TestCredentialWithRealm(t *testing.T) {
 	}
 
 	// Retrieve the updated credential and check its password
-	cr3, _, err := credentials.GetCred(credWithRealm, credRealm)
+	cr3, err := credentials.GetCred(credWithRealm, credRealm)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
 
-	if cr3.ClearPassword != updatedCredPassword {
+	if cr3.Content.ClearPassword != updatedCredPassword {
 		t.Errorf("Password not updated. %+v", cr3)
 	}
 
@@ -149,15 +149,15 @@ func TestCredentialACL(t *testing.T) {
 	credPassword := "this is a password"
 
 	t.Logf("INFO Creating credential realm='%s' user='%s'", credRealm, credWithRealm)
-	cr, acl, err := credentials.CreateCred(credWithRealm, credRealm, credPassword)
+	cr, err := credentials.CreateCred(credWithRealm, credRealm, credPassword)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
-	if cr.Username != credWithRealm {
+	if cr.Content.Username != credWithRealm {
 		t.Errorf("Invalid credential returned. %+v", cr)
 	}
-	if acl.Owner != testing_user {
+	if cr.ACL.Owner != testing_user {
 		t.Errorf("Invalid ACL returned. %+v", cr)
 	}
 
@@ -178,24 +178,24 @@ func TestCredentialACL(t *testing.T) {
 	}
 
 	t.Logf("INFO Verifying owner for credential realm='%s' user='%s'", credRealm, credWithRealm)
-	_, acl, err = credentials.GetCred(credWithRealm, credRealm)
+	cr, err = credentials.GetCred(credWithRealm, credRealm)
 	if err != nil {
 		t.Error(err)
 	}
 
-	if acl.Owner != "test" {
-		t.Errorf("Changing of owner did not work for credential realm='%s' user='%s'. Expected: '%s', found: '%s'", credRealm, credWithRealm, params.Get("owner"), acl.Owner)
+	if cr.ACL.Owner != "test" {
+		t.Errorf("Changing of owner did not work for credential realm='%s' user='%s'. Expected: '%s', found: '%s'", credRealm, credWithRealm, params.Get("owner"), cr.ACL.Owner)
 		// do not delete the credential in case testing failed
 		t.FailNow()
 	}
 	permReadFound := 0
-	for _, pr := range acl.Perms.Read {
+	for _, pr := range cr.ACL.Perms.Read {
 		if pr == "power" || pr == "user" {
 			permReadFound += 1
 		}
 	}
 	if permReadFound < 2 {
-		t.Errorf("Changing perms.read did not work for credential realm='%s' user='%s'. Expected: '%s', found: '%v'", credRealm, credWithRealm, params.Get("perms.read"), acl.Perms.Read)
+		t.Errorf("Changing perms.read did not work for credential realm='%s' user='%s'. Expected: '%s', found: '%v'", credRealm, credWithRealm, params.Get("perms.read"), cr.ACL.Perms.Read)
 		t.FailNow()
 	}
 

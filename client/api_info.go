@@ -37,12 +37,8 @@ func (ss *SplunkService) Info() (*InfoResource, error) {
 	}
 
 	// pathInfo represents this enpoint https://docs.splunk.com/Documentation/Splunk/8.1.3/RESTREF/RESTintrospect#server.2Finfo
-	httpCode, respBody, err := ss.doHttpRequest("GET", "/services/server/info", nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("%s list: %w", col.name, err)
-	}
 
-	err = col.parseResponse(httpCode, respBody)
+	err := doSplunkdHttpRequest(ss, "GET", "/services/server/info", nil, nil, "", &col)
 	if err != nil {
 		return nil, fmt.Errorf("%s list: %w", col.name, err)
 	}

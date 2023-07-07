@@ -1,10 +1,7 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 )
 
@@ -33,7 +30,6 @@ func (ss *SplunkService) Login(username, password, passcode2FA string) error {
 		return fmt.Errorf("login: password cannot be empty")
 	}
 
-	var resp *http.Response
 	var err error
 
 	loginParams := url.Values{}
@@ -45,20 +41,10 @@ func (ss *SplunkService) Login(username, password, passcode2FA string) error {
 	}
 
 	// Submit login form
-	if resp, err = ss.httpClient.PostForm(buildSplunkdUrl(ss.baseUrl, pathLogin, nil), loginParams); err != nil {
-		return fmt.Errorf("splunkd login: %w", err)
-	}
-
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		// HTTP 401
-		// 	{"messages":[{"type":"WARN","code":"incorrect_username_or_password","text":"Login failed"}]}
-		return fmt.Errorf("splunkd login: HTTP %v - %s", resp.StatusCode, respBody)
-	}
-
 	lr := LoginResponse{}
-	if err = json.Unmarshal(respBody, &lr); err != nil {
+	err = doSplunkdHttpRequest(ss, "POST", pathLogin, nil, []byte(loginParams.Encode()), "", &lr)
+
+	if err != nil {
 		return fmt.Errorf("splunkd login: %w", err)
 	}
 
