@@ -112,3 +112,30 @@ func (col *ConfigsCollection) GetStanza(name string) (*ConfigResource, error) {
 	}
 	return &entry.Content, nil
 }
+
+// GetConfigAsString retrieves the value of configuration configName of the selected stanza
+func (col *ConfigsCollection) GetConfigAsString(stanza, configName string) (string, error) {
+	stanzaConf, err := col.GetStanza(stanza)
+	if err != nil {
+		return "", err
+	}
+	return stanzaConf.GetString(configName)
+}
+
+// GetConfigAsInt retrieves the value of configuration configName of the selected stanza
+func (col *ConfigsCollection) GetConfigAsInt(stanza, configName string) (int, error) {
+	stanzaConf, err := col.GetStanza(stanza)
+	if err != nil {
+		return 0, err
+	}
+	return stanzaConf.GetInt(configName)
+}
+
+// GetConfigAsFloat retrieves the value of configuration configName of the selected stanza
+func (col *ConfigsCollection) GetConfigAsFloat(stanza, configName string) (float32, error) {
+	stanzaConf, err := col.GetStanza(stanza)
+	if err != nil {
+		return 0, err
+	}
+	return stanzaConf.GetFloat(configName)
+}

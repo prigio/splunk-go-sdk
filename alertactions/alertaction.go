@@ -5,6 +5,8 @@ import (
 	"encoding/csv"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -40,6 +42,7 @@ type AlertAction struct {
 	IconPath string
 	// params defines the acceptable parameters for the alert
 	params []*Param
+	//globalParams []*GlobalParam
 
 	// validateParams is an optional function which can be used to validate the run-time parameters
 	validateParams ValidateFunc
@@ -57,6 +60,10 @@ type AlertAction struct {
 	runtimeConfig *AlertConfig
 
 	splunkservice *client.SplunkService
+	splunkdlogger *log.Logger
+	stdin         io.Reader
+	stdout        io.Writer
+	stderr        io.Writer
 }
 
 func New(stanzaName, label, description, iconPath string) (*AlertAction, error) {
@@ -138,6 +145,61 @@ func (aa *AlertAction) GetParamNames() []string {
 	return paramsList
 }
 
+/*
+// RegisterGlobalParam adds a new parameter to the alert action.
+// The argument is additionally returned for further processing, if needed.
+func (aa *AlertAction) RegisterGlobalParam(configFile, stanza, name, title, description, defaultValue string, required bool) (*Param, error) {
+	configFile = strings.TrimSuffix(configFile, ".conf")
+	if configFile == "" {
+		return nil, fmt.Errorf("invalid alert action global parameter defined: 'configFile' cannot be empty")
+	}
+	if stanza == "" {
+		return nil, fmt.Errorf("invalid alert action global parameter defined: 'stanza' cannot be empty")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("invalid alert action global parameter defined: 'name' cannot be empty")
+	}
+	if title == "" {
+		return nil, fmt.Errorf("invalid alert action global parameter defined: 'title' cannot be empty")
+	}
+
+	// check if the parameter is already present
+	// return error in case it is already there
+	if _, err := aa.GetGlobalParam(name); err == nil {
+		return nil, fmt.Errorf("global parameter already existing. It is not possible to add multiple parameters having the same name. name=\"%s\"", name)
+	}
+
+	if aa.globalParams == nil {
+		aa.globalParams = make([]*GlobalParam, 0, 1)
+	}
+	param := &GlobalParam{
+		ConfigFile: configFile,
+		Stanza:     stanza,
+	}
+	param.Title = title
+	param.Name = name
+	param.Description = description
+	param.DefaultValue = defaultValue
+	param.Required = required
+
+	aa.globalParams = append(aa.globalParams, param)
+	return param, nil
+}
+*/
+// GetGlobalParam searches for the global param having the provided name.
+// Returns a pointer to the found parameter, or an error if the parameter was not found
+
+/*
+func (aa *AlertAction) GetGlobalParam(name string) (*GlobalParam, error) {
+	for _, p := range aa.globalParams {
+		if p.Name == name {
+			return p, nil
+		}
+	}
+	return nil, fmt.Errorf("global parameter not found having name=\"%s\"", name)
+}
+*/
+
 // GetFirstResults returns the first of the search results which the alert has been invoked on.
 func (aa *AlertAction) GetFirstResult() map[string]string {
 	if aa.runtimeConfig == nil {
@@ -212,54 +274,102 @@ func (aa *AlertAction) GetNamespace() (owner, app string) {
 	return aa.runtimeConfig.Owner, aa.runtimeConfig.App
 }
 
-func (aa *AlertAction) GetSplunkService() (*client.SplunkService, error) {
+// setSplunkService configures the splunkd client
+// A runtime configuration must be already available when performing this method.
+// The client has already been authenticated using the sessionKey which Splunk provides when starting the alert.
+func (aa *AlertAction) setSplunkService() error {
 	if aa.splunkservice != nil {
-		return aa.splunkservice, nil
+		// already available
+		return nil
 	}
 	if aa.runtimeConfig == nil {
-		return nil, fmt.Errorf("alert action config is nil: impossible to use it to retrieve connection information to Splunk")
+		return fmt.Errorf("alert action setSplunkService: no runtime config available. impossible to use it to initialize splunkd client")
 	}
 	// alert actions run locally on splunk servers. It might well be that certificates are self-generated there.
 	ss, err := client.New(aa.runtimeConfig.ServerUri, true, "")
 	if err != nil {
-		return nil, fmt.Errorf("alert action - get splunk service: %w", err)
+		return fmt.Errorf("alert action setSplunkService: %w", err)
 	}
 
 	if err := ss.LoginWithSessionKey(aa.runtimeConfig.SessionKey); err != nil {
-		return nil, fmt.Errorf("alert action - get splunk service: %w", err)
+		return fmt.Errorf("alert action setSplunkService: %w", err)
 	}
 
 	aa.splunkservice = ss
-	return ss, nil
+	return nil
+}
+
+// setLogger configures the splunkd-based logger
+// A runtime configuration must be already available when performing this method.
+func (aa *AlertAction) setLogger() error {
+	if aa.splunkdlogger != nil {
+		// already available
+		return nil
+	}
+	if aa.splunkservice != nil {
+		return fmt.Errorf("alert action setLogging: no splunkd client available. This operation must be performed when a runtime config is available. impossible to use it to initialize splunkd client")
+	}
+
+	// initialize a logger to perform internal logging
+	aa.splunkdlogger = aa.splunkservice.NewLogger("", 0, "_internal", "", "runId:"+aa.runID, "alertaction:"+aa.StanzaName)
+	return nil
+}
+
+// GetSplunkService returns a client which can be used to communicate with splunkd.
+// The client has already been authenticated using the sessionKey which Splunk provides when starting the alert.
+func (aa *AlertAction) GetSplunkService() (*client.SplunkService, error) {
+	if aa.splunkservice != nil {
+		return aa.splunkservice, nil
+	}
+	if err := aa.setSplunkService(); err != nil {
+		return nil, err
+	}
+	return aa.splunkservice, nil
 }
 
 // Log writes a log so that it can be read by Splunk.
 // Argument 'message' can use formatting markers as fmt.Sprintf. Aditional arguments 'a' will be provided to fmt.Sprintf
-func (aa *AlertAction) Log(level string, message string, a ...interface{}) (err error) {
+func (aa *AlertAction) Log(level string, message string, a ...interface{}) {
 	level = strings.ToUpper(level)
+	if level == "DEBUG" && !aa.debug {
+		// do not do anything if debug is not enabled
+		return
+	}
 	if level == "WARNING" {
 		// Typical error, just manage it...
 		level = "WARN"
 	}
 	if level != "DEBUG" && level != "INFO" && level != "WARN" && level != "ERROR" && level != "FATAL" {
-		fmt.Fprintf(os.Stderr, "ERROR - Log() function invoked with invalid level parameter. Accepted: DEBUG, INFO, WARN, ERROR, FATAL. Provided: '%s'\n", level)
-		return fmt.Errorf("invalid value of 'level' provided. Accepted: DEBUG, INFO, WARN, ERROR, FATAL. Provided: '%s'", level)
-	}
-	if level != "DEBUG" || (level == "DEBUG" && aa.debug) {
-		// do not do anything if debug is not enabled
-
-		message = "[" + aa.StanzaName + "] " + level + " runId=\"" + string(aa.runID) + "\" - " + message + "\n"
-
-		// isAtTerminal is global, set at the beginning of this file, in order to only do this once per execution
-		if isAtTerminal {
-			// prefix the message with timestamp and log_level
-			message = time.Now().Round(time.Millisecond).Format("2006-01-02 15:04:05.000 -0700") + " " + message
-		}
-
-		_, err = fmt.Fprintf(os.Stderr, message, a...)
+		level = "INFO"
 	}
 
-	return err
+	message = fmt.Sprintf("%s [%s] %s - %s\n",
+		time.Now().Round(time.Millisecond).Format("2006-01-02T15:04:05.000-0700"),
+		aa.StanzaName,
+		level,
+		message)
+
+	// isAtTerminal is global, set at the beginning of this file, in order to only do this once per execution
+	if !isAtTerminal && aa.splunkdlogger != nil {
+		aa.splunkdlogger.Printf(message, a)
+	} else {
+		fmt.Fprintf(os.Stderr, message, a...)
+	}
+}
+
+// initRuntime is responsible to load the runtime-configuration and initialize all necessary internal data structurs
+// This function must be executed before the actual execution of the alerting function.
+func (aa *AlertAction) initRuntime(c *AlertConfig) error {
+	if err := aa.setConfig(c); err != nil {
+		return fmt.Errorf("initRuntime: %w", err)
+	}
+	if err := aa.setSplunkService(); err != nil {
+		return fmt.Errorf("initRuntime: %w", err)
+	}
+	if err := aa.setLogger(); err != nil {
+		return fmt.Errorf("initRuntime: %w", err)
+	}
+	return nil
 }
 
 // setConfig stores run-time parameter within the alert action and its parameters.
@@ -278,7 +388,8 @@ func (aa *AlertAction) setConfig(c *AlertConfig) error {
 			aa.Log("DEBUG", "Parameter '%s' uses default value \"%s\"", param.Name, param.GetValue())
 		}
 	}
-	return nil
+	_, err := aa.GetSplunkService()
+	return err
 }
 
 // generateAlertActionsConf returns a string which can be used to define the alert action within the splunk configuration file default/alert_actions.conf
@@ -400,25 +511,36 @@ func (aa *AlertAction) RegisterAlertFunc(f AlertFunc) {
 }
 
 // printHelp prints command-line usage instructions to STDOUT
-func (aa *AlertAction) printHelp() {
+func (aa *AlertAction) printHelp(f *flag.FlagSet) {
 	fmt.Printf("Usage for custom alert action '%s'\n", aa.StanzaName)
 	fmt.Printf("Label: %s\n", aa.Label)
 	fmt.Printf("Description: %s\n", aa.Description)
 	fmt.Println("NOTE: Splunk invokes the alert action using the '--execute' flag, unless differently specified within alert_actions.conf")
 	fmt.Println("")
-	flag.PrintDefaults()
+	f.PrintDefaults()
 }
 
-func (aa *AlertAction) Run() error {
+// Run is the function responsible for actual execution of the alert action.
+func (aa *AlertAction) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	var err error
+	// set interfaces to outside world
+	aa.stdin = stdin
+	aa.stdout = stdout
+	aa.stderr = stderr
 
+	// configure standard command line parameters
+	flags := flag.NewFlagSet(args[0], flag.ExitOnError)
 	// defines the command-line parameters using the 'flag' module
-	executePtr := flag.Bool("execute", false, "Starts execution of the alert action. A JSON-based configuration must be provided via STDIN. This is what Splunk does.")
-	debugPtr := flag.Bool("debug", false, "Activates debug mode, useful only during development")
-	getConfPtr := flag.Bool("get-alert-actions-conf", false, "Print out a template for default/alert_actions.conf")
-	getSpecPtr := flag.Bool("get-alert-actions-spec", false, "Print out a template for README/alert_actions.conf.spec")
-	getSSSpecPtr := flag.Bool("get-saved-searches-spec", false, "Print out a template for README/savedsearches.conf.spec")
-	flag.Parse()
+	executePtr := flags.Bool("execute", false, "Starts execution of the alert action. A JSON-based configuration must be provided via STDIN. This is what Splunk does.")
+	debugPtr := flags.Bool("debug", false, "Activates debug mode, useful only during development")
+	interactivePtr := flags.Bool("interactive", false, "Interactively ask for parameter values and start a local execution. Useful for development and debugging only.")
+	getRunTimeConfPtr := flags.Bool("get-runtime-conf-example", false, fmt.Sprintf("Interactively ask for parameter values and generates a JSON-based configuration, as Splunk would send to your alert. You can use this as 'cat conf.json > %s -execute'.", args[0]))
+	getConfPtr := flags.Bool("get-alert-actions-conf", false, "Print out a template for default/alert_actions.conf")
+	getSpecPtr := flags.Bool("get-alert-actions-spec", false, "Print out a template for README/alert_actions.conf.spec")
+	getSSSpecPtr := flags.Bool("get-saved-searches-spec", false, "Print out a template for README/savedsearches.conf.spec")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
 
 	//if len(os.Args) == 1 {
 	//	return fmt.Errorf("invoke the alert with the '--execute' command-line parameter. Exiting")
@@ -438,14 +560,14 @@ func (aa *AlertAction) Run() error {
 		}
 
 		aa.Log("DEBUG", "Parsing run-time JSON configurations from STDIN")
-		runTimeConfig, err = getAlertConfigFromJSON(os.Stdin)
+		runTimeConfig, err = getAlertConfigFromJSON(stdin)
 		if err != nil {
 			aa.Log("FATAL", "Parsing of run-time JSON configurations from STDIN failed. %s", err.Error())
 			return err
 		}
 
 		aa.Log("DEBUG", "Setting run-time configuration: %+v", runTimeConfig)
-		err = aa.setConfig(runTimeConfig)
+		err = aa.initRuntime(runTimeConfig)
 		if err != nil {
 			aa.Log("FATAL", "Setting of run-time configurations failed. %s", err.Error())
 			return err
@@ -473,6 +595,21 @@ func (aa *AlertAction) Run() error {
 		return nil
 	}
 
+	if *interactivePtr {
+		if runTimeConfig, err := getAlertConfigInteractive(aa); err != nil {
+			aa.Log("FATAL", "Errow when preparing execution configuration: %s", err.Error())
+			return err
+		} else {
+			aa.Log("DEBUG", "Setting run-time configuration: %+v", runTimeConfig)
+			err = aa.initRuntime(runTimeConfig)
+			if err != nil {
+				aa.Log("FATAL", "Setting of run-time configurations failed. %s", err.Error())
+				return err
+			}
+		}
+		return aa.execute(aa)
+	}
+
 	if *getConfPtr {
 		fmt.Println(aa.generateAlertActionsConf())
 		return nil
@@ -486,8 +623,24 @@ func (aa *AlertAction) Run() error {
 		fmt.Println(aa.generateSavedSearchesSpec())
 		return nil
 	}
+	if *getRunTimeConfPtr {
+		var conf []byte
+		conf, err := generateAlerConfigJson(aa)
+		if err != nil {
+			return err
+		}
+		fmt.Println()
+		fmt.Printf(`You can use the following configuration by:
+1) saving this into a file, e.g. conf.json
+2) executing the alert as:
 
+	cat conf.json > %s --execute
+`, args[0])
+		fmt.Println("")
+		fmt.Printf("%s\n", conf)
+		return nil
+	}
 	// if no valid command-line parameters were provided
-	aa.printHelp()
+	aa.printHelp(flags)
 	return nil
 }

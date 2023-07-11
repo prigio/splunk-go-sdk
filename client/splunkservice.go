@@ -1,12 +1,13 @@
 package client
 
 import (
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/prigio/splunk-go-sdk/utils"
 )
 
 const (
@@ -34,49 +35,32 @@ type SplunkService struct {
 	info *InfoResource
 }
 
-func New(serviceUrl string, insecureSkipVerify bool, proxy string) (*SplunkService, error) {
-	if serviceUrl == "" || (!strings.HasPrefix(serviceUrl, "https://") && !strings.HasPrefix(serviceUrl, "http://")) {
+func New(splunkdUrl string, insecureSkipVerify bool, proxy string) (*SplunkService, error) {
+	if splunkdUrl == "" || (!strings.HasPrefix(splunkdUrl, "https://") && !strings.HasPrefix(splunkdUrl, "http://")) {
 		return nil, fmt.Errorf("splunk service new: invalid service URL provided; must be in format http(s)://host:port")
 	}
 	ns, _ := NewNamespace("nobody", "search", SplunkSharingApp)
 
+	httpClient, err := utils.NewHTTPClient(10*time.Second, insecureSkipVerify, proxy, "", "", "")
+
+	if err != nil {
+		return nil, fmt.Errorf("splunk service new: cannot create http client. %w", err)
+	}
+
+	if proxy == "" {
+		splunkdUrl, err := url.Parse(splunkdUrl)
+		if err != nil {
+			return nil, fmt.Errorf("splunk service new: invalid splunkd URL '%s'. %w", splunkdUrl, err)
+		}
+		if err := utils.IsReachable(*splunkdUrl); err != nil {
+			return nil, fmt.Errorf("splunk service new: unreachable splunkd URL '%s'. %w", splunkdUrl, err)
+		}
+	}
+
 	ss := &SplunkService{
-		nameSpace: *ns,
-		baseUrl:   strings.TrimRight(serviceUrl, "/"),
-	}
-
-	// initialize the internal http client to communicate with splunkd
-	httpTransport := &http.Transport{
-		DisableKeepAlives:   true,
-		TLSHandshakeTimeout: 5 * time.Second,
-		// Configure TLS certificate verification
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify},
-	}
-
-	if proxy != "" {
-		// golang also uses the env variable HTTP_PROXY to automatically use proxy
-		proxyUrl, err := url.Parse(proxy)
-		if err != nil {
-			return nil, fmt.Errorf("invalid proxy URL '%s'. %w", proxy, err)
-		}
-		err = isReachable(*proxyUrl)
-		if err != nil {
-			return nil, fmt.Errorf("unreachable proxy URL '%s'. %w", proxy, err)
-		}
-		httpTransport.Proxy = http.ProxyURL(proxyUrl)
-	} else {
-		splunkdUrl, err := url.Parse(ss.baseUrl)
-		if err != nil {
-			return nil, fmt.Errorf("invalid splunkd URL '%s'. %w", ss.baseUrl, err)
-		}
-		if err := isReachable(*splunkdUrl); err != nil {
-			return nil, fmt.Errorf("unreachable splunkd URL '%s'. %w", ss.baseUrl, err)
-		}
-	}
-
-	ss.httpClient = &http.Client{
-		Transport: httpTransport,
-		Timeout:   httpTimeout,
+		nameSpace:  *ns,
+		baseUrl:    strings.TrimRight(splunkdUrl, "/"),
+		httpClient: httpClient,
 	}
 
 	if proxy != "" {
@@ -84,13 +68,13 @@ func New(serviceUrl string, insecureSkipVerify bool, proxy string) (*SplunkServi
 		// this is done here, as we need the httpClient to have been prepared already
 		req, err := http.NewRequest(http.MethodHead, ss.baseUrl, nil)
 		if err != nil {
-			return nil, fmt.Errorf("unreachable splunkd URL '%s' via proxy '%s'. %w", ss.baseUrl, proxy, err)
+			return nil, fmt.Errorf("splunk service new: unreachable splunkd URL '%s' via proxy '%s'. %w", ss.baseUrl, proxy, err)
 		}
 		if r, err := ss.httpClient.Do(req); err != nil {
-			return nil, fmt.Errorf("unreachable splunkd URL '%s' via proxy '%s'. %w", ss.baseUrl, proxy, err)
+			return nil, fmt.Errorf("splunk service new: unreachable splunkd URL '%s' via proxy '%s'. %w", ss.baseUrl, proxy, err)
 		} else if r.StatusCode > 200 {
 			// a HEAD call to a wrong URL produces 502-Bad Gateway when going through a proxy server.
-			return nil, fmt.Errorf("unreachable splunkd URL '%s' via proxy '%s'. HTTP %d - %s", ss.baseUrl, proxy, r.StatusCode, r.Status)
+			return nil, fmt.Errorf("splunk service new: unreachable splunkd URL '%s' via proxy '%s'. HTTP %d - %s", ss.baseUrl, proxy, r.StatusCode, r.Status)
 		}
 	}
 

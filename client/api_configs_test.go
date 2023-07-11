@@ -142,7 +142,7 @@ func TestConfigResourceGetInt(t *testing.T) {
 	}
 
 	cr["keyFloatAsString"] = "3.14"
-	vInt, err = cr.GetInt("keyFloatAsString")
+	_, err = cr.GetInt("keyFloatAsString")
 	if err == nil {
 		t.Errorf("ConfigResource map: expecting error when trying to parse string-based float valut to int. found nil")
 	}

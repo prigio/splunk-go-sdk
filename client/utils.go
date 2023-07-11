@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // discardBody is used as a "nil" type by doSplunkdHttpRequest() for the parseJSONResultInto argument
@@ -69,7 +67,7 @@ func doSplunkdHttpRequest[T any](ss *SplunkService, method, urlPath string, urlP
 		// {"messages":[{"type":"WARN","text":"call not properly authenticated"}]}%
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("HTTP %s '%s':  %s - %s", method, fullUrl, resp.Status, string(respBody))
+		return fmt.Errorf("HTTP %s '%s':  %s %s - %s", method, fullUrl, resp.Status, http.StatusText(resp.StatusCode), string(respBody))
 	}
 
 	if fmt.Sprintf("%T", parseJSONResultInto) != "discardBody" && parseJSONResultInto != nil {
@@ -79,16 +77,6 @@ func doSplunkdHttpRequest[T any](ss *SplunkService, method, urlPath string, urlP
 	}
 
 	return nil
-}
-
-// isReachable tries to connect to the target URL and returns an error if this is not possible
-func isReachable(target url.URL) error {
-	if conn, err := net.DialTimeout("tcp", target.Host, 500*time.Millisecond); err != nil {
-		return err
-	} else {
-		conn.Close()
-		return nil
-	}
 }
 
 func interfaceToBool(v interface{}) bool {

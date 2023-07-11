@@ -46,7 +46,7 @@ func main() {
 	script.RegisterAlertFunc(doAlert)
 
 	// Start actual execution
-	err = script.Run()
+	err = script.Run(os.Args, os.Stdin, os.Stdout, os.Stderr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		// this will NOT run deferred function, so in case we have any, need to take care about that. Simply: do NOT use such functions within the main() ;-)

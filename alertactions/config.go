@@ -7,6 +7,9 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/prigio/splunk-go-sdk/client"
+	"github.com/prigio/splunk-go-sdk/utils"
 )
 
 /*
@@ -77,45 +80,58 @@ func getAlertConfigFromJSON(input io.Reader) (*AlertConfig, error) {
 	return ac, nil
 }
 
-/*
 // getAlertConfigInteractive uses the Params[] definition of an alert action to prepare a configuration based on:
 // - command line parameters
 // - interactively asking the user if no command-line parameter was found for an argument
-func getAlertConfigInteractive(mi *ModularInput) (*alertConfig, error) {
+func getAlertConfigInteractive(aa *AlertAction) (*AlertConfig, error) {
 	// first, need to get splunk endpoint, username and password to be able to login into the service if necessary.
-	ic := &inputConfig{}
-	ic.CheckpointDir = filepath.Join(os.TempDir(), mi.runID)
-	fmt.Printf("CheckPointDir set to '%s'", ic.CheckpointDir)
-
+	ic := &AlertConfig{}
 	fmt.Println("Interactively provide information to access local splunkd service.")
-	ic.URI = askForInput("Splunkd URL", "https://localhost:8089", false)
-	username := askForInput("Splunk username", "admin", false)
-	password := askForInput("Splunk password", "", true)
-
-	ss, err := client.NewSplunkServiceWithUsernameAndPassword(ic.URI, username, password, "", true)
+	ic.ServerUri = utils.AskForInput("Splunkd URL", "https://localhost:8089", false)
+	username := utils.AskForInput("Splunk username", "admin", false)
+	password := utils.AskForInput("Splunk password", "", true)
+	ss, err := client.New(ic.ServerUri, true, "")
 	if err != nil {
-		return nil, fmt.Errorf("connection failed to splunkd on '%s' with username '%s': %s", ic.URI, username, err.Error())
+		return nil, fmt.Errorf("connection failed to splunkd on '%s'. %w", ic.ServerUri, err)
 	}
+	if err = ss.Login(username, password, ""); err != nil {
+		return nil, fmt.Errorf("login failed to splunkd on with username '%s': %w", username, err)
+	}
+
 	ic.SessionKey = ss.GetSessionKey()
-
-	// Stanzas hosts the configurations provided to the modular input
-	ic.Stanzas = make([]Stanza, 1)
-	stanza := Stanza{Name: "interactive-input"}
-	stanza.Params = make([]Param, len(mi.Args))
-
-	fmt.Println("Interactively provide values for modular input parameters.")
-	var prompt, val string
-	for seq, arg := range mi.Args {
-		prompt = fmt.Sprintf("Provide parameter %s (%s, '%s')", arg.Title, arg.DataType, arg.Name)
-		if arg.Description != "" {
-			prompt = fmt.Sprintf("%s\n    %s\n", prompt, arg.Description)
-		}
-		val = askForInput(prompt, arg.DefaultValue, false)
-		stanza.Params[seq] = Param{Name: arg.Name, Value: val}
+	ic.App = utils.AskForInput("Splunk app context", "", false)
+	ic.Owner = username
+	//ic.ResultsFile =
+	//ic.ResultsLink =
+	//ic.ServerHost =
+	ic.SearchUri = "interactive search"
+	ic.Sid = "sid of interactive search"
+	ic.SearchName = "interactive search"
+	fmt.Println("Interactively provide values for alert action parameters.")
+	ic.Configuration = make(map[string]string)
+	for _, p := range aa.params {
+		ic.Configuration[p.Name] = utils.AskForInput(p.Title, p.DefaultValue, false)
 	}
 
-	ic.Stanzas[0] = stanza
+	/*
+		for seq, arg := range aa.Args {
+			prompt = fmt.Sprintf("Provide parameter %s (%s, '%s')", arg.Title, arg.DataType, arg.Name)
+			if arg.Description != "" {
+				prompt = fmt.Sprintf("%s\n    %s\n", prompt, arg.Description)
+			}
+			val = AskForInput(prompt, arg.DefaultValue, false)
+			stanza.Params[seq] = Param{Name: arg.Name, Value: val}
+		}
+	*/
 
 	return ic, nil
 }
-*/
+
+// generateAlerConfigJson returns a JSON formatted configuration for the input, based on interactively asked information
+func generateAlerConfigJson(aa *AlertAction) ([]byte, error) {
+	ac, err := getAlertConfigInteractive(aa)
+	if err != nil {
+		return nil, err
+	}
+	return json.MarshalIndent(ac, "", "  ")
+}
