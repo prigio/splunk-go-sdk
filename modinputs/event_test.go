@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/prigio/splunk-go-sdk/utils"
 )
 
 func TestXML(t *testing.T) {
@@ -30,7 +32,7 @@ func TestXML(t *testing.T) {
 		t.Errorf("SplunkEvent raised an error for a correctly structured event. %s", err.Error())
 	}
 
-	if !strings.Contains(string(xml), strconv.FormatFloat(float64(tn.Truncate(time.Millisecond).UnixNano())/1000000000.0, 'f', 3, 64)) {
+	if !strings.Contains(string(xml), strconv.FormatFloat(utils.GetEpoch(tn), 'f', 3, 64)) {
 		t.Errorf("SplunkEvent's XML does not contain epoch time. XML text: %s", string(xml))
 	}
 	if !strings.Contains(string(xml), "<data>some test data</data>") {
