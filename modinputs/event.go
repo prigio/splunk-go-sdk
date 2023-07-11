@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/prigio/splunk-go-sdk/utils"
 )
 
 // SplunkEvent is structure used to feed log data to splunk using the XML streaming mode.
@@ -32,7 +34,7 @@ func (se *SplunkEvent) epochTimeStr() string {
 	if se.Time != se.cachedTime {
 		// regenerate the cached epoch representation
 		se.cachedTime = se.Time
-		se.cachedEpochStr = strconv.FormatFloat(float64(se.Time.Truncate(time.Millisecond).UnixNano())/1000000000.0, 'f', 3, 64)
+		se.cachedEpochStr = strconv.FormatFloat(utils.GetEpoch(se.Time), 'f', 3, 64)
 	}
 	return se.cachedEpochStr
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/prigio/splunk-go-sdk/client"
+	"github.com/prigio/splunk-go-sdk/utils"
 )
 
 /*
@@ -81,9 +82,9 @@ func getInputConfigInteractive(mi *ModularInput) (*inputConfig, error) {
 	fmt.Printf("CheckPointDir set to '%s'", ic.CheckpointDir)
 
 	fmt.Println("Interactively provide information to access local splunkd service.")
-	ic.URI = askForInput("Splunkd URL", "https://localhost:8089", false)
-	username := askForInput("Splunk username", "admin", false)
-	password := askForInput("Splunk password", "", true)
+	ic.URI = utils.AskForInput("Splunkd URL", "https://localhost:8089", false)
+	username := utils.AskForInput("Splunk username", "admin", false)
+	password := utils.AskForInput("Splunk password", "", true)
 
 	ss, err := client.New(ic.URI, true, "")
 	if err != nil {
@@ -106,7 +107,7 @@ func getInputConfigInteractive(mi *ModularInput) (*inputConfig, error) {
 		if arg.Description != "" {
 			prompt = fmt.Sprintf("%s\n    %s\n", prompt, arg.Description)
 		}
-		val = askForInput(prompt, arg.DefaultValue, false)
+		val = utils.AskForInput(prompt, arg.DefaultValue, false)
 		stanza.Params[seq] = Param{Name: arg.Name, Value: val}
 	}
 
