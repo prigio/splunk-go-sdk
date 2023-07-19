@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/prigio/splunk-go-sdk/client"
+	"github.com/prigio/splunk-go-sdk/splunkd"
 	"github.com/prigio/splunk-go-sdk/utils"
 )
 
@@ -86,7 +86,7 @@ func getInputConfigInteractive(mi *ModularInput) (*inputConfig, error) {
 	username := utils.AskForInput("Splunk username", "admin", false)
 	password := utils.AskForInput("Splunk password", "", true)
 
-	ss, err := client.New(ic.URI, true, "")
+	ss, err := splunkd.New(ic.URI, true, "")
 	if err != nil {
 		return nil, fmt.Errorf("connection failed to splunkd on '%s': %w", ic.URI, err)
 	}
