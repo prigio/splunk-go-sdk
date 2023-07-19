@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -20,6 +19,18 @@ import (
 // NewHTTPClient configures a new HTTP client which can be used to issue requests to external services
 func NewHTTPClient(timeout time.Duration, insecureSkipVerify bool, proxy string, tlsCAcerts, tlsClientCert, tlsClientKey string) (*http.Client, error) {
 	// initialize the internal http client to communicate with splunkd
+	var retries = 3
+	var backoff = 30 * time.Second
+	httpTransport, err := NewHTTPTransport(timeout, retries, backoff, proxy, insecureSkipVerify, tlsCAcerts, tlsClientCert, tlsClientKey)
+	if err != nil {
+		return nil, err
+	}
+	return &http.Client{Transport: httpTransport, Timeout: timeout}, nil
+}
+
+// NewHTTPCNewHTTPTransport configures a new HTTP transport with the provided settings. The transport can be used to instantiate a http client
+func NewHTTPTransport(timeout time.Duration, retries int, backoff time.Duration, proxy string, insecureSkipVerify bool, tlsCAcerts, tlsClientCert, tlsClientKey string) (http.RoundTripper, error) {
+	// initialize the internal http client to communicate with splunkd
 	httpTransport := &http.Transport{
 		DisableKeepAlives:   true,
 		TLSHandshakeTimeout: timeout,
@@ -33,15 +44,15 @@ func NewHTTPClient(timeout time.Duration, insecureSkipVerify bool, proxy string,
 	if tlsClientCert != "" && tlsClientKey != "" {
 		clientCert, err := tls.LoadX509KeyPair(tlsClientCert, tlsClientKey)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error loading tls certificate and key '%s'/'%s'. %w", tlsClientCert, tlsClientKey, err)
 		}
 		tlsConfig.Certificates = []tls.Certificate{clientCert}
 	}
 
 	if tlsCAcerts != "" {
-		caCert, err := ioutil.ReadFile(tlsCAcerts)
+		caCert, err := os.ReadFile(tlsCAcerts)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error loading tls CA certificate '%s'. %w", tlsCAcerts, err)
 		}
 		tlsConfig.RootCAs = x509.NewCertPool()
 		tlsConfig.RootCAs.AppendCertsFromPEM(caCert)
@@ -61,12 +72,45 @@ func NewHTTPClient(timeout time.Duration, insecureSkipVerify bool, proxy string,
 		}
 		httpTransport.Proxy = http.ProxyURL(proxyUrl)
 	}
-	return &http.Client{Transport: httpTransport, Timeout: timeout}, nil
+	return httpTransport, nil
 }
 
 // IsReachable tries to connect to the target URL and returns an error if this is not possible
 func IsReachable(target url.URL) error {
-	if conn, err := net.DialTimeout("tcp", target.Host, 500*time.Millisecond); err != nil {
+	var port = target.Port()
+	if target.Port() == "" {
+		switch strings.ToLower(target.Scheme) {
+		case "http":
+			port = "80"
+		case "https":
+			port = "443"
+		case "ftp":
+			port = "20"
+		case "ldap":
+			port = "389"
+		case "ldaps":
+			port = "636"
+		case "ftps":
+			port = "990"
+		case "ssh":
+			port = "22"
+		case "smtp":
+			port = "25"
+		case "pop3":
+			port = "110"
+		case "pop3s":
+			port = "995"
+		case "sftp":
+			port = "115"
+		case "sockes":
+			port = "1080"
+		case "imaps":
+			port = "993"
+		default:
+			return fmt.Errorf("isReachable: invalid URL - cannot determine correct port. URL=\"%s\"", target.String())
+		}
+	}
+	if conn, err := net.DialTimeout("tcp", target.Hostname()+":"+port, 500*time.Millisecond); err != nil {
 		return err
 	} else {
 		conn.Close()

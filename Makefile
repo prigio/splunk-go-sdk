@@ -8,8 +8,21 @@ ENV_LIN=--build-arg GOOS=linux --build-arg GOARCH=amd64
 default: check
 
 # the following builds and tests the libraries
+check: build-modinputs test-modinputs build-client test-client
 
-check: build-modinputs test-modinputs
+build-client:
+	@echo ""
+	@echo "Starting 'go build' for the client package"
+	@echo "This will throw errors if go cannot build the library."
+	@echo "Note: output of a built library gets discarded by go, as there is no executable in it"
+	@echo ""
+	docker run --rm -v $(PWD):/src/ --workdir /src/client ${GOCONTAINERIMAGE} go build
+
+test-client:
+	@echo ""
+	@echo "Starting 'go test' for the client package"
+	@echo ""
+	docker run --rm -v $(PWD):/src/ --workdir /src/client ${GOCONTAINERIMAGE} go test
 
 build-modinputs:
 	@echo ""

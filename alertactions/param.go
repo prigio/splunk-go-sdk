@@ -42,6 +42,8 @@ type Param struct {
 	// It only makes sense for parameters of type Text and TextArea
 	Placeholder string
 	Required    bool
+	// Sensitive expresses whether the parameter can or cannot be logged. If sensitive, then the actual value should be masked upon logging
+	Sensitive bool
 
 	// availableOptions is a slice of admissible choices for the values of this parameter
 	// intended to be used to represent parameters of type dropdown and radio
@@ -118,46 +120,4 @@ func (p *Param) GetChoices() []string {
 		l[i] = c.Value
 	}
 	return l
-}
-
-// getAlertActionsSpec returns a string which can be used to describe the parameter within splunk's README/alert_actions.conf.spec file
-func (p *Param) getAlertActionsSpec() string {
-	buf := new(strings.Builder)
-	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
-	buf.Grow(512)
-
-	fmt.Fprintf(buf, `param.%s = <string>
-*  %s: %s
-*  Default value: "%s"
-`, p.Name, p.Title, strings.ReplaceAll(p.Description, "\n", " "), strings.ReplaceAll(p.DefaultValue, "\n", " "))
-
-	if len(p.availableOptions) > 0 {
-		fmt.Fprintf(buf, "* Available choices: %s", strings.Join(p.GetChoices(), "; "))
-	}
-	return buf.String()
-}
-
-// getAlertActionsConf returns a string which can be used to describe the parameter within splunk's default/alert_actions.conf file
-func (p *Param) getAlertActionsConf() string {
-	buf := new(strings.Builder)
-	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
-	buf.Grow(512)
-
-	fmt.Fprintf(buf, "# %s: %s\n", p.Title, strings.ReplaceAll(p.Description, "\n", " "))
-	if len(p.availableOptions) > 0 {
-		fmt.Fprintf(buf, "# Available choices: %s\n", strings.Join(p.GetChoices(), "; "))
-	}
-
-	fmt.Fprintf(buf, "param.%s = %s\n", p.Name, strings.ReplaceAll(p.DefaultValue, "\n", "\\\n"))
-
-	return buf.String()
-}
-
-// getSavedSearchesSpec returns a string which can be used to describe the parameter within splunk's README/savedsearches.conf.spec file
-func (p *Param) getSavedSearchesSpec(stanzaName string) string {
-	specVal := "<string>"
-	if len(p.availableOptions) > 0 {
-		specVal = fmt.Sprintf("[%s]", strings.Join(p.GetChoices(), "|"))
-	}
-	return fmt.Sprintf("action.%s.param.%s = %s\n", stanzaName, p.Name, specVal)
 }

@@ -122,6 +122,7 @@ func (ss *SplunkService) GetConfigs(filename string) *ConfigsCollection {
 	if filename == "" {
 		return nil
 	}
+
 	c, ok := ss.configs[filename]
 	if ok && c != nil {
 		return c

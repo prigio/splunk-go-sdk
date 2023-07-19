@@ -1,12 +1,5 @@
 package alertactions
 
-/*
-import (
-	"fmt"
-
-	"github.com/prigio/splunk-go-sdk/client"
-)
-
 // Parameters used by the ModularInput.
 type GlobalParam struct {
 	ConfigFile string
@@ -14,15 +7,25 @@ type GlobalParam struct {
 	Param
 }
 
+/*
 func (gp *GlobalParam) GetValue(ss *client.SplunkService) (string, error) {
+	if gp.actualValueIsSet {
+		return gp.actualValue, nil
+	}
 	if ss == nil {
 		return "", fmt.Errorf("globalParam GetValue: reference to splunk service cannot be nil")
 	}
 	col := ss.GetConfigs(gp.ConfigFile)
-	if stanza, err := col.GetStanza(gp.Stanza); err != nil {
+	stanza, err := col.GetStanza(gp.Stanza)
+	if err != nil {
 		return "", fmt.Errorf("globalParam GetValue: %w", err)
-	} else {
-		return stanza.GetString(gp.Name)
 	}
+	v, err := stanza.GetString(gp.Name)
+	if err != nil {
+		return "", fmt.Errorf("globalParam GetValue: %w", err)
+	}
+	gp.actualValue = v
+	gp.actualValueIsSet = true
+	return v, nil
 }
 */
