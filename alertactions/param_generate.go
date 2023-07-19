@@ -91,3 +91,70 @@ func (p *Param) getUIHTML(stanzaName string) string {
 
 	return buf.String()
 }
+
+// getAlertActionsConf returns a string which can be used to describe the parameter within splunk's default/alert_actions.conf file
+func (p *Param) getCustomConf() string {
+	buf := new(strings.Builder)
+	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
+	buf.Grow(512)
+	if p.Required {
+		fmt.Fprintf(buf, "# %s: (required) %s \n", p.Title, strings.ReplaceAll(p.Description, "\n", " "))
+	} else {
+		fmt.Fprintf(buf, "# %s: %s\n", p.Title, strings.ReplaceAll(p.Description, "\n", " "))
+	}
+	if len(p.availableOptions) > 0 {
+		fmt.Fprintf(buf, "# Available choices: %s\n", strings.Join(p.GetChoices(), "; "))
+	}
+
+	fmt.Fprintf(buf, "%s = %s\n", p.Name, strings.ReplaceAll(p.DefaultValue, "\n", "\\\n"))
+
+	return buf.String()
+}
+
+// getAlertActionsSpec returns a string which can be used to describe the parameter within splunk's README/alert_actions.conf.spec file
+func (p *Param) getCustomSpec() string {
+	buf := new(strings.Builder)
+	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
+	buf.Grow(512)
+	fmt.Fprintf(buf, `%s = <string>
+*  %s: %s
+*  Required: %v
+*  Default value: "%s"
+`, p.Name, p.Title, strings.ReplaceAll(p.Description, "\n", " "), p.Required, strings.ReplaceAll(p.DefaultValue, "\n", " "))
+	if len(p.availableOptions) > 0 {
+		fmt.Fprintf(buf, "*  Available choices: %s", strings.Join(p.GetChoices(), "; "))
+	}
+	return buf.String()
+}
+
+// getDocumentation returns a markdown-formatted list-item which describes the parameter
+func (p *Param) getDocumentation() string {
+	buf := new(strings.Builder)
+	fmt.Fprint(buf, "- ")
+	if p.ConfigFile != "" && p.Stanza != "" {
+		// this is a global parameter
+		configFile := p.ConfigFile
+		if !strings.HasSuffix(configFile, ".conf") {
+			configFile = configFile + ".conf"
+		}
+		fmt.Fprintf(buf, "- %s/[%s]: `%s` : %s - ", configFile, p.Stanza, p.Name, p.Title)
+	} else {
+		fmt.Fprintf(buf, "- `%s` : %s - ", p.Name, p.Title)
+	}
+	if p.Required {
+		fmt.Fprintf(buf, "(required) ")
+	}
+	fmt.Fprint(buf, p.Description)
+
+	if p.DefaultValue != "" {
+		fmt.Fprintf(buf, "    Default value: `%s`", p.DefaultValue)
+	}
+
+	if len(p.availableOptions) > 0 {
+		fmt.Fprintln(buf, "    Available choices:")
+		for _, option := range p.availableOptions {
+			fmt.Fprintf(buf, "    - `%s`: \"%s\"", option.Value, option.VisibleValue)
+		}
+	}
+	return buf.String()
+}

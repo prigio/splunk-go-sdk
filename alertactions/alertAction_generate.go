@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/prigio/splunk-go-sdk/client"
+	"github.com/prigio/splunk-go-sdk/splunkd"
 	"github.com/prigio/splunk-go-sdk/utils"
 )
 
@@ -60,12 +60,19 @@ func (aa *AlertAction) generateUIHTML() string {
 	buf.Grow(512)
 	fmt.Fprintf(buf, `<!-- 
 Template for UI configuration. This has been automatically generated
-Store this XML content at: default/data/ui/alerts/%s.html -->\n", aa.StanzaName)
+Store this XML content at: default/data/ui/alerts/%s.html
+
 Documentation for this file is at: 
 	- https://dev.splunk.com/enterprise/docs/devtools/customalertactions/createuicaa/
 	- https://docs.splunk.com/Documentation/SplunkCloud/9.0.2305/AdvancedDev/CustomVizFormatterApiRef
 -->
 <form>
+<splunk-control-group label="Instructions">
+	<span class="help-block">
+		Values can contain tokens such as <code>$name$</code> and <code>$result.fieldname$</code>.<br/>
+		Read more <a target="_blank" href="https://docs.splunk.com/Documentation/Splunk/9.1.0/Alert/EmailNotificationTokens">here</a>.
+	</span>
+</splunk-control-group>
 `, aa.StanzaName)
 
 	for _, par := range aa.params {
@@ -185,6 +192,90 @@ func (aa *AlertAction) generateRestMapConf() string {
 	return buf.String()
 }
 
+// generateDocumentation returns a markdown-formatted string describing the alert and its parameters
+func (aa *AlertAction) generateDocumentation() string {
+	buf := new(strings.Builder)
+	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
+	buf.Grow(512)
+
+	fmt.Fprintf(buf, `# Alert action "%s"
+
+%s
+
+`, aa.Label, aa.Description)
+	if aa.Documentation != "" {
+		fmt.Fprintln(buf, aa.Documentation)
+	}
+
+	fmt.Fprint(buf, `
+## User-facing parameters
+
+The following describes the parameters whicn an end user can setup using the alert action user interface.
+
+`)
+	for _, par := range aa.params {
+		fmt.Fprintln(buf, par.getDocumentation())
+	}
+
+	fmt.Fprintf(buf, `
+
+## Global parameters
+
+Global parameters are set by administrators and are valid for all executions of the alert. 
+They are set in a custom configuration file and stanza, as described in the following.
+
+`)
+	for _, par := range aa.globalParams {
+		fmt.Fprintln(buf, par.getDocumentation())
+	}
+
+	fmt.Fprintf(buf, `
+
+## Troubleshooting
+
+The following indicates ways to troubleshoot functionality of the alert.
+
+Each execution of the alert generates a random "runId" which is then written alongside all the emitted logs.
+
+### Logs
+The alert performs logging on STDERR until a runtime configuration is loaded. 
+Afterwards, it uses a dedicated sourcetype for its own logging.
+This means, that before the load of runtime configuration, logs are sent to:
+
+    index=_internal sourcetype=splunkd component=sendmodalert action="%s"
+
+You can use the Splunk UI to enhance the verbosity of the logging of the "sendmodalert" component 
+to more details of Splunk's own execution of the alert. 
+
+After load of runtime configuration, the alert then writes its own data within:
+
+    index=_internal sourcetype="%s"
+
+You can therefore use the following splunk search to look for all these logs:
+
+    index=_internal
+       (sourcetype=splunkd component=sendmodalert action="%s")
+       OR sourcetype="%s"
+
+### Interactive execution
+
+You can run the alert from the command-line by invoking it with the appropriate command-line switch. Execute './<filename> -h' for more information
+
+### Common issues
+
+In case you are seing ONLY logs like this in "index=_internal sourcetype=splunkd component=sendmodalert"
+
+INFO  sendmodalert [21376 AlertNotifierWorker-0] - Invoking modular alert action=alert-jira-transition for search="something" sid="scheduler__user__search__RMD529dab0d5260fcdd7_at_1689737700_50" in app="search" owner="user" type="saved"
+ERROR sendmodalert [21376 AlertNotifierWorker-0] - action=alert-jira-transition - Execution of alert action script failed
+
+Chances are splunk was not able to start the alert script at all: is the executable really executable? 
+Check within "$SPLUNK_HOME/etc/apps/<appname>/[linux/windows/darwin]_.../bin/" that the alert files are executable for the splunk OS user.
+
+`, aa.StanzaName, aa.getLoggingSourcetype(), aa.StanzaName, aa.getLoggingSourcetype())
+
+	return buf.String()
+}
+
 // generateAlertConfigJson returns a JSON formatted configuration for the input, based on interactively asked information
 func (aa *AlertAction) generateAlertConfigJson() ([]byte, error) {
 	ac, err := aa.getAlertConfigInteractive()
@@ -204,7 +295,7 @@ func (aa *AlertAction) getAlertConfigInteractive() (*alertConfig, error) {
 	ic.ServerUri = utils.AskForInput("Splunkd URL", "https://localhost:8089", false)
 	username := utils.AskForInput("Splunk username", "admin", false)
 	password := utils.AskForInput("Splunk password", "", true)
-	ss, err := client.New(ic.ServerUri, true, "")
+	ss, err := splunkd.New(ic.ServerUri, true, "")
 	if err != nil {
 		return nil, fmt.Errorf("connection failed to splunkd on '%s'. %w", ic.ServerUri, err)
 	}
@@ -239,4 +330,90 @@ func (aa *AlertAction) getAlertConfigInteractive() (*alertConfig, error) {
 	*/
 
 	return ic, nil
+}
+
+func (aa *AlertAction) generateAdHocConfigSpecs() string {
+	var paramsByFileAndStanza map[string]map[string][]string = make(map[string]map[string][]string)
+
+	for _, p := range aa.globalParams {
+		confFile := p.ConfigFile
+		if !strings.HasSuffix(confFile, ".conf") {
+			confFile = confFile + ".conf"
+		}
+		if _, found := paramsByFileAndStanza[confFile]; !found {
+			paramsByFileAndStanza[confFile] = make(map[string][]string)
+			paramsByFileAndStanza[confFile][p.Stanza] = make([]string, 0)
+		}
+		if _, found := paramsByFileAndStanza[confFile][p.Stanza]; !found {
+			paramsByFileAndStanza[confFile][p.Stanza] = make([]string, 0)
+		}
+		paramsByFileAndStanza[confFile][p.Stanza] = append(paramsByFileAndStanza[confFile][p.Stanza], p.getCustomSpec())
+	}
+
+	buf := new(strings.Builder)
+
+	fmt.Fprintf(buf, `
+** Specification for custom configuration files for alert action '%s' [%s]
+** These specs have been auto-generated
+`, aa.Label, aa.StanzaName)
+
+	for file, stanzas := range paramsByFileAndStanza {
+		fmt.Fprintf(buf, `
+**
+** File: 'README/%s.spec'
+**
+`, file)
+		for stanza, paramSpecs := range stanzas {
+			fmt.Fprintf(buf, "[%s]\n", stanza)
+			for _, specString := range paramSpecs {
+				fmt.Fprintln(buf, specString)
+			}
+
+		}
+		fmt.Fprintln(buf, "")
+	}
+	return buf.String()
+}
+
+func (aa *AlertAction) generateAdHocConfigConfs() string {
+	var paramsByFileAndStanza map[string]map[string][]string = make(map[string]map[string][]string)
+
+	for _, p := range aa.globalParams {
+		confFile := p.ConfigFile
+		if !strings.HasSuffix(confFile, ".conf") {
+			confFile = confFile + ".conf"
+		}
+		if _, found := paramsByFileAndStanza[confFile]; !found {
+			paramsByFileAndStanza[confFile] = make(map[string][]string)
+			paramsByFileAndStanza[confFile][p.Stanza] = make([]string, 0)
+		}
+		if _, found := paramsByFileAndStanza[confFile][p.Stanza]; !found {
+			paramsByFileAndStanza[confFile][p.Stanza] = make([]string, 0)
+		}
+		paramsByFileAndStanza[confFile][p.Stanza] = append(paramsByFileAndStanza[confFile][p.Stanza], p.getCustomConf())
+	}
+
+	buf := new(strings.Builder)
+
+	fmt.Fprintf(buf, `
+## Configurations for custom configuration files for alert action '%s' [%s]
+## These configurations have been auto-generated
+`, aa.Label, aa.StanzaName)
+
+	for file, stanzas := range paramsByFileAndStanza {
+		fmt.Fprintf(buf, `
+##
+## File: 'default/%s'
+##
+`, file)
+		for stanza, paramSpecs := range stanzas {
+			fmt.Fprintf(buf, "[%s]\n", stanza)
+			for _, specString := range paramSpecs {
+				fmt.Fprintln(buf, specString)
+			}
+
+		}
+		fmt.Fprintln(buf, "")
+	}
+	return buf.String()
 }

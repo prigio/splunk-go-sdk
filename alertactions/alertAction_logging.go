@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+// getLoggingSourcetype returns a string indicating the sourcetype used for the administrative logging within index=_internal
+func (aa *AlertAction) getLoggingSourcetype() string {
+	return "alertaction:" + aa.StanzaName
+}
+
 // setLogger configures the splunkd-based logger
 // A runtime configuration must be already available when performing this method.
 func (aa *AlertAction) setLogger() error {
@@ -17,12 +22,12 @@ func (aa *AlertAction) setLogger() error {
 		// already available
 		return nil
 	}
-	if aa.splunkservice == nil {
+	if aa.splunkd == nil {
 		return fmt.Errorf("alert action setLogger: no splunkd client available. This operation must be performed when a runtime config is available")
 	}
 
 	// initialize a logger to perform internal logging
-	aa.splunkdlogger = aa.splunkservice.NewLogger("runId:"+aa.runID, 0, "_internal", "", fmt.Sprintf("Alert [%s] %s", aa.GetApp(), aa.GetSearchName()), "alertaction:"+aa.StanzaName)
+	aa.splunkdlogger = aa.splunkd.NewLogger("runId:"+aa.runID, 0, "_internal", "", fmt.Sprintf("Alert [%s] %s", aa.GetApp(), aa.GetSearchName()), aa.getLoggingSourcetype())
 	return nil
 }
 
@@ -59,7 +64,7 @@ func (aa *AlertAction) Log(level string, message string, a ...interface{}) {
 // SetEndUserLogger configures logging to report to the end-user the results of the alert execution.
 // Messages will be logged into the specified index and can have a custom prefix added to them.
 func (aa *AlertAction) SetEndUserLogger(index, messagePrefix string) error {
-	if aa.splunkservice == nil {
+	if aa.splunkd == nil {
 		// already available
 		return fmt.Errorf("alert action setEndUserLogger: no splunkd client available. This operation must be performed when a runtime config is available")
 	}
@@ -67,7 +72,7 @@ func (aa *AlertAction) SetEndUserLogger(index, messagePrefix string) error {
 		return fmt.Errorf("alert action setEndUserLogger: index parameter cannot be emtpy")
 	}
 	// initialize a logger to perform logging visible by the end user
-	aa.endUserLogger = aa.splunkservice.NewLogger(messagePrefix, 0, index, "", fmt.Sprintf("Alert [%s] %s", aa.GetApp(), aa.GetSearchName()), "alertaction:"+aa.StanzaName)
+	aa.endUserLogger = aa.splunkd.NewLogger(messagePrefix, 0, index, "", fmt.Sprintf("Alert [%s] %s", aa.GetApp(), aa.GetSearchName()), "alertaction:"+aa.StanzaName)
 	return nil
 }
 

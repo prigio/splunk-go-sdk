@@ -12,7 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/prigio/splunk-go-sdk/client"
+	"github.com/prigio/splunk-go-sdk/splunkd"
+	"github.com/prigio/splunk-go-sdk/utils"
 
 	"github.com/mattn/go-isatty"
 )
@@ -32,19 +33,22 @@ type ValidateFunc func(*AlertAction) error
 // standardised methods available.
 type AlertAction struct {
 	// Name appearing within alert_actions.conf stanza as [stanzaname]
-	// Must be lowercase
+	// Must be lowercase, not contain spaces and possibly with words separated by a dash '-'
 	StanzaName string
-	// Label is displayed on the UI
+	// Label for the alert, displayed on the UI
 	Label string
 	// Description within the UI
 	Description string
+	// Markdown-formatted documentation content about the logic behind the alert execution.
+	// This, along with other pre-defined contents can be printed out by starting the alert from the commandline with the propert parameter. See './<alertname> -h'
+	Documentation string
 	// IconPath is the name of a file within appserver/static/ to be used to represent this alert action
 	IconPath string
 	// params defines the acceptable parameters for the alert
 	params []*Param
 	// globalParams is used to track the global parameters necessary for the alert.
 	// "global", in that they are tracked in a dedicate configuration file and are not configured within the alert UI
-	globalParams map[string]*GlobalParam
+	globalParams []*Param
 
 	// validateParams is an optional function which can be used to validate the run-time parameters
 	validateParams ValidateFunc
@@ -61,22 +65,24 @@ type AlertAction struct {
 	// actual run-time configurations provided by Splunk
 	runtimeConfig *alertConfig
 
-	splunkservice *client.SplunkService
+	splunkd *splunkd.Client
+
+	// splunkdlogger is used to log message for administrators within index=_internal
 	splunkdlogger *log.Logger
 	// endUserLogger is used to log messages for the end user in an index preconfigured by them
 	endUserLogger *log.Logger
-	stdin         io.Reader
-	stdout        io.Writer
-	stderr        io.Writer
+	// these are used by the Run() function and are useful for testing.
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
 }
 
 func New(stanzaName, label, description, iconPath string) (*AlertAction, error) {
 	if stanzaName == "" {
-		return nil, fmt.Errorf("alertAction.New: 'stanzaName' cannot be empty")
+		return nil, utils.NewErrInvalidParam("alertAction.New", nil, "'stanzaName' cannot be empty")
 	}
-
 	if label == "" {
-		return nil, fmt.Errorf("alertAction.New: 'label' cannot be empty")
+		return nil, utils.NewErrInvalidParam("alertAction.New", nil, "'label' cannot be empty")
 	}
 
 	var aa = &AlertAction{
@@ -97,19 +103,19 @@ func (aa *AlertAction) EnableDebug() {
 // The argument is additionally returned for further processing, if needed.
 func (aa *AlertAction) AddParam(name, title, description, defaultValue, placeholder string, uiType ParamType, required bool) (*Param, error) {
 	if name == "" {
-		return nil, fmt.Errorf("invalid alert action parameter defined: 'name' cannot be empty")
+		return nil, utils.NewErrInvalidParam("addParam", nil, "'name' cannot be empty")
 	}
 	if title == "" {
-		return nil, fmt.Errorf("invalid alert action parameter defined: 'title' cannot be empty")
+		return nil, utils.NewErrInvalidParam("addParam", nil, "'title' cannot be empty")
 	}
 	if !(uiType == 0 || uiType == ParamTypeText || uiType == ParamTypeTextArea || uiType == ParamTypeSearchDropdown || uiType == ParamTypeRadio || uiType == ParamTypeDropdown || uiType == ParamTypeColorPicker) {
-		return nil, fmt.Errorf("invalid alert action parameter defined: when the uiType should either be 0, or one of the allowed ParamTypes")
+		return nil, utils.NewErrInvalidParam("addParam", nil, "'uiType' should either be 0 or one of the allowed ParamTypes")
 	}
 
 	// check if the parameter is already present
 	// return error in case it is already there
 	if _, err := aa.GetParam(name); err == nil {
-		return nil, fmt.Errorf("parameter already existing. It is not possible to add multiple parameters having the same name. name=\"%s\"", name)
+		return nil, utils.NewErrInvalidParam("addParam", nil, "not possible to add multiple parameters having the same name. name=\"%s\"", name)
 	}
 
 	if aa.params == nil {
@@ -137,7 +143,7 @@ func (aa *AlertAction) GetParam(name string) (*Param, error) {
 			return p, nil
 		}
 	}
-	return nil, fmt.Errorf("alert action parameter not found. name=\"%s\"", name)
+	return nil, fmt.Errorf("parameter not found. name=\"%s\"", name)
 }
 
 // GetParamNames returns a list of all the parameters defined for the alert action so far
@@ -151,58 +157,52 @@ func (aa *AlertAction) GetParamNames() []string {
 
 // RegisterGlobalParam adds a new parameter to the alert action.
 // The argument is additionally returned for further processing, if needed.
-func (aa *AlertAction) RegisterGlobalParam(configFile, stanza, name, title, description, defaultValue string, required bool) (*GlobalParam, error) {
+func (aa *AlertAction) RegisterGlobalParam(configFile, stanza, name, title, description, defaultValue string, required bool) (*Param, error) {
 	configFile = strings.TrimSuffix(configFile, ".conf")
+	if name == "" {
+		return nil, utils.NewErrInvalidParam("registerGlobalParam", nil, "'name' cannot be empty")
+	}
 	if configFile == "" {
-		return nil, fmt.Errorf("invalid alert action global parameter defined: 'configFile' cannot be empty")
+		return nil, utils.NewErrInvalidParam("registerGlobalParam", nil, "'configFile' cannot be empty for parameter '%s'", name)
+
 	}
 	if stanza == "" {
-		return nil, fmt.Errorf("invalid alert action global parameter defined: 'stanza' cannot be empty")
-	}
-	if name == "" {
-		return nil, fmt.Errorf("invalid alert action global parameter defined: 'name' cannot be empty")
+		return nil, utils.NewErrInvalidParam("registerGlobalParam", nil, "'stanza' cannot be empty for parameter '%s'", name)
 	}
 	if title == "" {
-		return nil, fmt.Errorf("invalid alert action global parameter defined: 'title' cannot be empty")
+		return nil, utils.NewErrInvalidParam("registerGlobalParam", nil, "'title' cannot be empty for parameter '%s'", name)
 	}
-
 	// check if the parameter is already present
 	// return error in case it is already there
 	if _, err := aa.GetGlobalParam(name); err == nil {
-		return nil, fmt.Errorf("global parameter already existing. It is not possible to add multiple parameters having the same name. name=\"%s\"", name)
+		return nil, utils.NewErrInvalidParam("registerGlobalParam", nil, "parameter with name '%s' already existing", name)
 	}
 
 	if aa.globalParams == nil {
-		aa.globalParams = make(map[string]*GlobalParam)
+		aa.globalParams = make([]*Param, 0, 1)
 	}
 
-	param := &GlobalParam{
-		ConfigFile: configFile,
-		Stanza:     stanza,
+	param := &Param{
+		ConfigFile:   configFile,
+		Stanza:       stanza,
+		Title:        title,
+		Name:         name,
+		Description:  description,
+		DefaultValue: defaultValue,
+		Required:     required,
 	}
-	param.Title = title
-	param.Name = name
-	param.Description = description
-	param.DefaultValue = defaultValue
-	param.Required = required
 
-	aa.globalParams[name] = param
+	aa.globalParams = append(aa.globalParams, param)
 	return param, nil
 }
 
 // GetGlobalParam searches for the global param having the provided name.
 // Returns a pointer to the found parameter, or an error if the parameter was not found
-func (aa *AlertAction) GetGlobalParam(name string) (*GlobalParam, error) {
-	var p *GlobalParam
-	var found bool
-	if aa.globalParams == nil {
-		found = false
-	} else {
-		p, found = aa.globalParams[name]
-	}
-
-	if found {
-		return p, nil
+func (aa *AlertAction) GetGlobalParam(name string) (*Param, error) {
+	for _, p := range aa.globalParams {
+		if p.Name == name {
+			return p, nil
+		}
 	}
 	return nil, fmt.Errorf("getGlobalParam: not found. name=\"%s\"", name)
 }
@@ -241,6 +241,15 @@ func (aa *AlertAction) GetApp() string {
 		return ""
 	}
 	return aa.runtimeConfig.App
+}
+
+// GetOwner returns the name of the app containing the search which triggered the alert action
+func (aa *AlertAction) GetOwner() string {
+	if aa.runtimeConfig == nil {
+		aa.Log("ERROR", "GetOwner invoked without a runtime-configuration having being loaded.")
+		return ""
+	}
+	return aa.runtimeConfig.Owner
 }
 
 // GetResultsFile TBD: closing the file must be done by the user.
@@ -282,36 +291,36 @@ func (aa *AlertAction) GetSid() string {
 	return aa.runtimeConfig.Sid
 }
 
-func (aa *AlertAction) GetNamespace() (owner, app string) {
+func (aa *AlertAction) GetNamespace() (*splunkd.Namespace, error) {
 	if aa.runtimeConfig == nil {
-		aa.Log("ERROR", "GetNamespace invoked without a runtime-configuration having being loaded.")
-		return "", ""
+		return nil, fmt.Errorf("getNamespace invoked without a runtime-configuration having being loaded")
 	}
-	return aa.runtimeConfig.Owner, aa.runtimeConfig.App
+	return splunkd.NewNamespace(aa.runtimeConfig.Owner, aa.runtimeConfig.App, "")
 }
 
 // setSplunkService configures the splunkd client
 // Prerequisites to execution: a runtime configuration must be already available (aa.setConfig()) when performing this method.
 // The client has already been authenticated using the sessionKey which Splunk provides when starting the alert.
 func (aa *AlertAction) setSplunkService() error {
-	if aa.splunkservice != nil {
+	if aa.splunkd != nil {
 		// already available
 		return nil
 	}
 	if aa.runtimeConfig == nil {
-		return fmt.Errorf("alert action setSplunkService: no runtime config available. impossible to use it to initialize splunkd client")
+		return fmt.Errorf("setSplunkService: no runtime config available. impossible to use it to initialize splunkd client")
 	}
 	// alert actions run locally on splunk servers. It might well be that certificates are self-generated there.
-	ss, err := client.New(aa.runtimeConfig.ServerUri, true, "")
+	ss, err := splunkd.New(aa.runtimeConfig.ServerUri, true, "")
+	ss.SetNamespace(aa.GetOwner(), aa.GetApp(), splunkd.SplunkSharingGlobal)
 	if err != nil {
-		return fmt.Errorf("alert action setSplunkService: %w", err)
+		return fmt.Errorf("setSplunkService: %w", err)
 	}
 
 	if err := ss.LoginWithSessionKey(aa.runtimeConfig.SessionKey); err != nil {
-		return fmt.Errorf("alert action setSplunkService: %w", err)
+		return fmt.Errorf("setSplunkService: %w", err)
 	}
 
-	aa.splunkservice = ss
+	aa.splunkd = ss
 	return nil
 }
 
@@ -322,14 +331,14 @@ func (aa *AlertAction) GetRunId() string {
 
 // GetSplunkService returns a client which can be used to communicate with splunkd.
 // The client has already been authenticated using the sessionKey which Splunk provides when starting the alert.
-func (aa *AlertAction) GetSplunkService() (*client.SplunkService, error) {
-	if aa.splunkservice != nil {
-		return aa.splunkservice, nil
+func (aa *AlertAction) GetSplunkService() (*splunkd.Client, error) {
+	if aa.splunkd != nil {
+		return aa.splunkd, nil
 	}
 	if err := aa.setSplunkService(); err != nil {
 		return nil, err
 	}
-	return aa.splunkservice, nil
+	return aa.splunkd, nil
 }
 
 // initRuntime is responsible to load the runtime-configuration and initialize all necessary internal data structures
@@ -357,15 +366,15 @@ func (aa *AlertAction) initRuntime(c *alertConfig) error {
 }
 
 func (aa *AlertAction) setGlobalParams() error {
-	if aa.splunkservice == nil {
-		return fmt.Errorf("setGlobalParams: no splunk service available. Execute this method after setConfigAndParams() and setSplunkService()")
+	if aa.splunkd == nil {
+		return fmt.Errorf("setGlobalParams: no splunk service available. Execute this method after setSplunkService()")
 	}
-	var configsCollection *client.ConfigsCollection
-	var stanza *client.ConfigResource
+	var configsCollection *splunkd.ConfigsCollection
+	var stanza *splunkd.ConfigResource
 	var loggedVal string
 	var err error
 	for _, param := range aa.globalParams {
-		configsCollection = aa.splunkservice.GetConfigs(param.ConfigFile)
+		configsCollection = aa.splunkd.GetConfigs(param.ConfigFile)
 		stanza, err = configsCollection.GetStanza(param.Stanza)
 		if err != nil {
 			return fmt.Errorf("setGlobalParams: stanza '%s' not found in config '%s'. %w", param.Stanza, param.ConfigFile, err)
@@ -393,7 +402,7 @@ func (aa *AlertAction) setGlobalParams() error {
 // Returns an error if any of these actions failed
 func (aa *AlertAction) setParams() error {
 	if aa.runtimeConfig == nil {
-		return fmt.Errorf("alert action setParams: no runtime config available")
+		return fmt.Errorf("setParams: no runtime config available")
 	}
 	var loggedVal string
 	// assign the actual value to the parameters
@@ -405,7 +414,7 @@ func (aa *AlertAction) setParams() error {
 			}
 			aa.Log("INFO", "Setting parameter %s=\"%s\"", param.Name, loggedVal)
 			if err := param.SetValue(v); err != nil {
-				return fmt.Errorf("error while applying run-time configuration: %s", err.Error())
+				return fmt.Errorf("esetParams: rror while applying run-time configuration: %s", err.Error())
 			}
 		} else {
 			aa.Log("DEBUG", "Parameter '%s' uses default value \"%s\"", param.Name, param.GetValue())
@@ -457,8 +466,11 @@ func (aa *AlertAction) Run(args []string, stdin io.Reader, stdout, stderr io.Wri
 	getRunTimeConfPtr := flags.Bool("get-runtime-conf-example", false, fmt.Sprintf("Interactively ask for parameter values and generates a JSON-based configuration, as Splunk would send to your alert. You can use this as 'cat conf.json > %s -execute'.", args[0]))
 	getConfPtr := flags.Bool("get-alert-actions-conf", false, "Print out a template for default/alert_actions.conf")
 	getSpecPtr := flags.Bool("get-alert-actions-spec", false, "Print out a template for README/alert_actions.conf.spec")
+	getCustConfPtr := flags.Bool("get-custom-config-conf", false, "Print out a template for default/<custom-config>.conf")
+	getCustSpecPtr := flags.Bool("get-custom-config-spec", false, "Print out a template for README/<custom-config>.conf.spec")
 	getRestMapConfPtr := flags.Bool("get-rest-map-conf", false, "Print out a template for default/restmap.conf")
 	getSSSpecPtr := flags.Bool("get-saved-searches-spec", false, "Print out a template for README/savedsearches.conf.spec")
+	getDocuPtr := flags.Bool("get-documentation", false, "Print out markdown-formatted documentation for the alert")
 	getUIHTML := flags.Bool("get-ui-html", false, fmt.Sprintf("Print out a template for the UI configuration to be stored at default/data/ui/alerts/%s.html", aa.StanzaName))
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
@@ -528,34 +540,49 @@ func (aa *AlertAction) Run(args []string, stdin io.Reader, stdout, stderr io.Wri
 		return aa.execute(aa)
 	}
 
+	var actionSelected bool
 	if *getConfPtr {
 		fmt.Println(aa.generateAlertActionsConf())
-		return nil
+		actionSelected = true
 	}
 
 	if *getSpecPtr {
 		fmt.Println(aa.generateAlertActionsSpec())
-		return nil
+		actionSelected = true
 	}
 	if *getSSSpecPtr {
 		fmt.Println(aa.generateSavedSearchesSpec())
-		return nil
+		actionSelected = true
 	}
 
 	if *getUIHTML {
 		fmt.Println(aa.generateUIHTML())
-		return nil
+		actionSelected = true
 	}
 
 	if *getRunTimeConfPtr {
 		fmt.Println(aa.generateRuntimeConfig(args[0]))
-		return nil
+		actionSelected = true
 	}
 	if *getRestMapConfPtr {
 		fmt.Println(aa.generateRestMapConf())
-		return nil
+		actionSelected = true
+	}
+	if *getCustConfPtr {
+		fmt.Println(aa.generateAdHocConfigConfs())
+		actionSelected = true
+	}
+	if *getCustSpecPtr {
+		fmt.Println(aa.generateAdHocConfigSpecs())
+		actionSelected = true
+	}
+	if *getDocuPtr {
+		fmt.Println(aa.generateDocumentation())
+		actionSelected = true
 	}
 	// if no valid command-line parameters were provided
-	aa.printHelp(flags)
+	if !actionSelected {
+		aa.printHelp(flags)
+	}
 	return nil
 }
