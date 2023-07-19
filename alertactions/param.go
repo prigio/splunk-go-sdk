@@ -2,6 +2,7 @@ package alertactions
 
 import (
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -44,6 +45,12 @@ type Param struct {
 	Required    bool
 	// Sensitive expresses whether the parameter can or cannot be logged. If sensitive, then the actual value should be masked upon logging
 	Sensitive bool
+	// ConfigFile ist the name of the configuration file where this parameter is located.
+	// This applies only to global parameters, which are not defined within alert_actions.conf
+	ConfigFile string
+	// Stanza is the name of the configuration stanza within ConfigFile file where this parameter is located.
+	// This applies only to global parameters, which are not defined within alert_actions.conf
+	Stanza string
 
 	// availableOptions is a slice of admissible choices for the values of this parameter
 	// intended to be used to represent parameters of type dropdown and radio
@@ -105,12 +112,37 @@ func (p *Param) SetValue(v string) error {
 }
 
 // getValue returns the run-time value which was set for this parameter, or its DefaultValue in case no value has been set
+// It substitutes env variables in the $var and ${var} within the value
 func (p *Param) GetValue() string {
 	if p.actualValueIsSet {
-		return p.actualValue
+		return os.ExpandEnv(p.actualValue)
 	}
-	return p.DefaultValue
+	return os.ExpandEnv(p.DefaultValue)
 }
+
+/*
+func (gp *GlobalParam) GetValue(ss *client.SplunkService) (string, error) {
+	if gp.actualValueIsSet {
+		return gp.actualValue, nil
+	}
+	if ss == nil {
+		return "", fmt.Errorf("globalParam GetValue: reference to splunk service cannot be nil")
+	}
+	col := ss.GetConfigs(gp.ConfigFile)
+	stanza, err := col.GetStanza(gp.Stanza)
+	if err != nil {
+		return "", fmt.Errorf("globalParam GetValue: %w", err)
+	}
+	v, err := stanza.GetString(gp.Name)
+	if err != nil {
+		return "", fmt.Errorf("globalParam GetValue: %w", err)
+	}
+	v = os.ExpandEnv(v)
+	gp.actualValue = v
+	gp.actualValueIsSet = true
+	return v, nil
+}
+*/
 
 // GetChoices returns a list of the internal values of the acceptable options for the parameter.
 // If there are no acceptable choices, it returns an empty slice.
