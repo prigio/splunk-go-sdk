@@ -30,7 +30,7 @@ type Client struct {
 	kvstore     *KVStoreCollCollection
 	// context of the current authenticated session. Provides info about the logged-in username, roles, etc
 	authContext *ContextResource
-	configs     map[string]*ConfigsCollection
+	//configs     map[string]*ConfigsCollection
 	// information about the splunk version, server where splunk is deployed, ...
 	info *InfoResource
 }
@@ -120,7 +120,11 @@ func (ss *Client) GetKVStore() *KVStoreCollCollection {
 	return ss.kvstore
 }
 
-func (ss *Client) GetConfigs(filename string) *ConfigsCollection {
+//func (ss *Client) GetConfigs(filename string) *ConfigsCollection {
+//	return NewConfigsCollection(ss, filename)
+//}
+/*
+func (ss *Client) GetConfigsNS(filename, owner, app string) *ConfigsCollection {
 	if ss.configs == nil {
 		ss.configs = make(map[string]*ConfigsCollection)
 	}
@@ -132,6 +136,7 @@ func (ss *Client) GetConfigs(filename string) *ConfigsCollection {
 	if ok && c != nil {
 		return c
 	}
-	ss.configs[filename] = NewConfigsCollection(ss, filename)
+	ss.configs[filename] = NewConfigsCollectionNS(ss, filename, owner, app)
 	return ss.configs[filename]
 }
+*/

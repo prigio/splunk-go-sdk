@@ -27,7 +27,7 @@ func TestConfigsSourcetypes(t *testing.T) {
 	props.Set("disabled", "1")
 
 	t.Logf("INFO Creating new sourcetype='%s'", newSourcetype)
-	entry, err := propsCol.CreateConfig(newSourcetype, &props)
+	entry, err := propsCol.CreateStanza(newSourcetype, &props)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -189,6 +189,52 @@ func TestConfigResourceGetFloat(t *testing.T) {
 	} else if vFloat != 3.14 {
 		t.Errorf("ConfigResource map: wrong float value retrieved from '%s'. Expected '%v', actual '%v'", "keyFloatAsString", 3.14, vFloat)
 	}
+}
+
+func TestConfigsNS(t *testing.T) {
+	newSourcetype := uuid.New().String()[0:8] + "-sourcetype"
+
+	t.Log("INFO Connecting to Splunk")
+	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	if err = ss.Login(testing_user, testing_password, testing_mfaCode); err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	propsCol := NewConfigsCollectionNS(ss, "props", "user", "search")
+
+	//nsTestSearch, _ := NewNamespace("test", "search", SplunkSharingApp)
+	nsTestLauncher, _ := NewNamespace("test", "launcher", SplunkSharingApp)
+
+	t.Logf("TestConfigNS: Working with sourcetype %s", newSourcetype)
+
+	params := url.Values{}
+	params.Set("REPORT-fields", "testSearchFields")
+	ce, err := propsCol.CreateStanza(newSourcetype, &params)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	ce.ACL.Sharing = string(SplunkSharingApp)
+	if err := propsCol.UpdateACL(ce.Name, ce.ACL); err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	checkCE, _ := propsCol.Get(newSourcetype)
+	if checkCE.ACL.Sharing != ce.ACL.Sharing {
+		t.Errorf("TestConfigsNS: sharing for resource '%s/%s' is '%s', expected '%s'", "props", newSourcetype, checkCE.ACL.Sharing, ce.ACL.Sharing)
+	}
+
+	params.Set("REPORT-fields", "testSearchLauncher")
+	_, err = propsCol.CreateNS(nsTestLauncher, newSourcetype, &params)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
 }
 
 /*

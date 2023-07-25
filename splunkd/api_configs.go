@@ -96,7 +96,20 @@ func NewConfigsCollection(ss *Client, configFileName string) *ConfigsCollection 
 	return col
 }
 
-func (col *ConfigsCollection) CreateConfig(name string, params *url.Values) (*collectionEntry[ConfigResource], error) {
+func NewConfigsCollectionNS(ss *Client, configFileName, owner, app string) *ConfigsCollection {
+	var col = &ConfigsCollection{}
+	configFileName = strings.ToLower(configFileName)
+	// remove .conf from filename, if present
+	configFileName = strings.TrimSuffix(configFileName, ".conf")
+	ns, _ := NewNamespace(owner, app, SplunkSharingApp)
+
+	col.name = "conf-" + configFileName
+	col.path = ns.GetServicesNSUrl() + "configs/conf-" + configFileName
+	col.splunkd = ss
+	return col
+}
+
+func (col *ConfigsCollection) CreateStanza(name string, params *url.Values) (*collectionEntry[ConfigResource], error) {
 	if params == nil || len(*params) == 0 {
 		return nil, fmt.Errorf("%s createConfig: params cannot be empty", col.name)
 	}

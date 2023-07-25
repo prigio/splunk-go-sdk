@@ -45,13 +45,17 @@ func doSplunkdHttpRequest[T any](ss *Client, method, urlPath string, urlParams *
 	urlParams.Set("output_mode", "json")
 
 	fullUrl, _ = url.JoinPath(ss.baseUrl, urlPath)
+	// in some cases, the SDK sends absolute URLs to this function
+	if strings.HasPrefix(urlPath, "http") {
+		fullUrl = urlPath
+	}
 	fullUrl = fullUrl + "?" + urlParams.Encode()
 
 	// this also manages case where body is nil or has len=0
 	bodyReader = bytes.NewReader(body)
 
 	if req, err = http.NewRequest(method, fullUrl, bodyReader); err != nil {
-		return fmt.Errorf("doHttpRequestV2: %w", err)
+		return fmt.Errorf("doSplunkdHttpRequest: %w", err)
 	}
 	if contentType != "" {
 		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Type

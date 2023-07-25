@@ -91,7 +91,7 @@ func TestKVStoreDataManagement(t *testing.T) {
 		t.Logf("INFO Inserted key:'%s'", key)
 	}
 
-	kvce.Query(ss, "", "", "", 0, 0, false, &data)
+	kvce.Query(ss, "{}", "", "", 0, 0, false, &data)
 	if len(data) != 1 {
 		t.Errorf("Collection '%s' is expected to only have 1 entry. Found:%d", collectionName, len(data))
 		t.FailNow()

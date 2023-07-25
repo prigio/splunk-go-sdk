@@ -1,7 +1,6 @@
 package splunkd
 
 import (
-	"fmt"
 	"net/url"
 )
 
@@ -54,21 +53,15 @@ func (col *CredentialsCollection) GetCred(user, realm string) (*collectionEntry[
 }
 
 func (col *CredentialsCollection) UpdateCred(user, realm, newPassword string) error {
-
 	entryId := urlEncodeCredential(user, realm)
-
 	credPostParams := url.Values{}
 	credPostParams.Set("password", newPassword)
 
-	if err := col.Update(entryId, &credPostParams); err != nil {
-		return fmt.Errorf("%s UpdateCred: %w", col.name, err)
-	}
-
-	return nil
+	return col.Update(entryId, &credPostParams)
 }
 
 // https://docs.splunk.com/Documentation/Splunk/9.0.5/RESTUM/RESTusing#Access_Control_List
-func (col *CredentialsCollection) UpdateCredACL(user, realm string, aclParams *url.Values) error {
+func (col *CredentialsCollection) UpdateCredACL(user, realm string, acl AccessControlList) error {
 	entryId := urlEncodeCredential(user, realm)
-	return col.UpdateACL(entryId, aclParams)
+	return col.UpdateACL(entryId, acl)
 }

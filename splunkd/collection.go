@@ -33,6 +33,24 @@ func (ce *collectionEntry[T]) Delete(ss *Client) error {
 	return nil
 }
 
+func (ce *collectionEntry[T]) setSharing(ss *Client, sharing SplunkSharing) error {
+	fullUrl, _ := url.JoinPath(ce.Id, "acl")
+	ce.ACL.Sharing = string(sharing)
+	tmp := collectionEntry[T]{}
+	if err := doSplunkdHttpRequest(ss, "POST", fullUrl, ce.ACL.ToURL(), nil, "", &tmp); err != nil {
+		return fmt.Errorf("setSharing: cannot share '%s' to '%s'. %w", ce.Name, sharing, err)
+	}
+	ce.ACL = tmp.ACL
+	return nil
+}
+
+func (ce *collectionEntry[T]) SetSharingGlobal(ss *Client) error {
+	if ce.ACL.Sharing == string(SplunkSharingGlobal) {
+		return nil
+	}
+	return ce.setSharing(ss, SplunkSharingGlobal)
+}
+
 func getUrl(collectionPath, entry string) string {
 	var fullUrl string
 
@@ -108,7 +126,9 @@ func (col *collection[T]) Create(entryName string, params *url.Values) (*collect
 	}
 
 	fullUrl := getUrl(col.path, "")
-
+	if !params.Has("name") {
+		params.Set("name", entryName)
+	}
 	tmpCol := collection[T]{}
 	if err := doSplunkdHttpRequest(col.splunkd, "POST", fullUrl, nil, []byte(params.Encode()), "", &tmpCol); err != nil {
 		return nil, fmt.Errorf("%s create: %w", col.name, err)
@@ -184,7 +204,7 @@ func (col *collection[T]) Delete(entryName string) error {
 }
 
 // https://docs.splunk.com/Documentation/Splunk/9.0.5/RESTUM/RESTusing#Access_Control_List
-func (col *collection[T]) UpdateACL(entryName string, aclParams *url.Values) error {
+func (col *collection[T]) UpdateACL(entryName string, acl AccessControlList) error {
 	if err := col.isInitialized(); err != nil {
 		return fmt.Errorf("updateACL: %w", err)
 	}
@@ -193,6 +213,8 @@ func (col *collection[T]) UpdateACL(entryName string, aclParams *url.Values) err
 	}
 
 	fullUrl := getUrl(col.path, entryName) + "/acl"
+
+	aclParams := acl.ToURL()
 
 	currentEntry, err := col.Get(entryName)
 	if err != nil {

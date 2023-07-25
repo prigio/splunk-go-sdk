@@ -1,7 +1,6 @@
 package splunkd
 
 import (
-	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
@@ -163,16 +162,19 @@ func TestCredentialACL(t *testing.T) {
 
 	// retrieve the new credential
 	t.Logf("INFO Changing owner for credential realm='%s' user='%s'", credRealm, credWithRealm)
+	acl := AccessControlList{Owner: "test"}
+	acl.Perms.Read = []string{"power", "user"}
+	acl.Perms.Write = []string{"admin", "user"}
+	/*
+		params := url.Values{}
+		params.Set("owner", "test")
+		params.Set("perms.read", "power")
+		params.Add("perms.read", "user")
 
-	params := url.Values{}
-	params.Set("owner", "test")
-	params.Set("perms.read", "power")
-	params.Add("perms.read", "user")
-
-	params.Set("perms.write", "admin")
-	params.Add("perms.write", "user")
-
-	err = credentials.UpdateCredACL(credWithRealm, credRealm, &params)
+		params.Set("perms.write", "admin")
+		params.Add("perms.write", "user")
+	*/
+	err = credentials.UpdateCredACL(credWithRealm, credRealm, acl)
 	if err != nil {
 		t.Error(err)
 	}
@@ -184,7 +186,7 @@ func TestCredentialACL(t *testing.T) {
 	}
 
 	if cr.ACL.Owner != "test" {
-		t.Errorf("Changing of owner did not work for credential realm='%s' user='%s'. Expected: '%s', found: '%s'", credRealm, credWithRealm, params.Get("owner"), cr.ACL.Owner)
+		t.Errorf("Changing of owner did not work for credential realm='%s' user='%s'. Expected: '%s', found: '%s'", credRealm, credWithRealm, acl.Owner, cr.ACL.Owner)
 		// do not delete the credential in case testing failed
 		t.FailNow()
 	}
@@ -195,7 +197,7 @@ func TestCredentialACL(t *testing.T) {
 		}
 	}
 	if permReadFound < 2 {
-		t.Errorf("Changing perms.read did not work for credential realm='%s' user='%s'. Expected: '%s', found: '%v'", credRealm, credWithRealm, params.Get("perms.read"), cr.ACL.Perms.Read)
+		t.Errorf("Changing perms.read did not work for credential realm='%s' user='%s'. Expected: '%s', found: '%v'", credRealm, credWithRealm, acl.Perms.Read, cr.ACL.Perms.Read)
 		t.FailNow()
 	}
 

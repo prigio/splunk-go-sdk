@@ -71,6 +71,7 @@ query - Query JSON object.
 Conditional operators: $gt, $gte, $lt, $lte, and $ne
 Logical operators: $and, $or, and ,$not (invert conditional operators)
 Examples:
+query="{}" (select all documents)
 query={"title":"Item"} (Select all documents with property title that has value Item)
 query={"price":{"$gt":5}} (Select all documents with price greater than 5)
 fields - Comma-separated list of fields to include (1) or exclude (0). A fields value cannot contain both include and exclude specifications except for exclusion of the _key field. Examples:
@@ -92,7 +93,7 @@ func (entry *collectionEntry[KVStoreCollResource]) Query(ss *Client, query, fiel
 		return utils.NewErrInvalidParam(ctx, nil, "'splunkService' cannot be nil")
 	}
 	if query == "" {
-		return utils.NewErrInvalidParam(ctx, nil, "'query' cannot be empty")
+		return utils.NewErrInvalidParam(ctx, nil, "'query' cannot be empty. Provide \"{}\" to select all documents")
 	}
 	if storeJSONResultInto == nil {
 		return utils.NewErrInvalidParam(ctx, nil, "'storeJSONResultInto' cannot be nil")
