@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/prigio/splunk-go-sdk/utils"
 )
 
 /* This file defines the struct describing a parameter of an alert action */
@@ -28,7 +30,13 @@ type paramOption struct {
 	VisibleValue string
 }
 
-// Parameters used by the ModularInput.
+// Param is a parameter used by the ModularInput. It can be used in two ways:
+//
+//  1. as a regular run-time parameter, whose value is provided by Splunk via STDIN to the alert action during its startup
+//  2. as a global parameter, whose value is statycally configured in some configuration file (normally called after the app hosting the alert action)
+//
+// Initialize this struct using the proper functions.
+// Note: because the value of a Param is set based on Splunk configurations, you cannot explicitly set this.
 type Param struct {
 	// Title is the visible name of the parameter, used within the UI
 	Title string
@@ -45,7 +53,7 @@ type Param struct {
 	Required    bool
 	// Sensitive expresses whether the parameter can or cannot be logged. If sensitive, then the actual value should be masked upon logging
 	Sensitive bool
-	// ConfigFile ist the name of the configuration file where this parameter is located.
+	// ConfigFile is the name of the configuration file where this parameter is located.
 	// This applies only to global parameters, which are not defined within alert_actions.conf
 	ConfigFile string
 	// Stanza is the name of the configuration stanza within ConfigFile file where this parameter is located.
@@ -60,6 +68,53 @@ type Param struct {
 	// actualValueIsSet tracks whether a value for the parameter has been actually set.
 	// if false, the DefaultValue will be returned when asking for the parameter's value
 	actualValueIsSet bool
+}
+
+// NewGlobalParam instantiates a global parameter, whose value will be read from splunk's configuration file
+// when starting up the alert action.
+func NewGlobalParam(configFile, stanza, name, title, description, defaultValue string, required bool) (*Param, error) {
+	return newParameter(configFile, stanza, name, title, description, defaultValue, "", 0, required)
+}
+
+// NewParam instantiates a parameter, whose value is provided by splunk to the alert action when starting it up
+func NewParam(name, title, description, defaultValue, placeholder string, uiType ParamType, required bool) (*Param, error) {
+	return newParameter("", "", name, title, description, defaultValue, placeholder, uiType, required)
+}
+
+// newParameter is an internal utility function to actually instantiate a new Parameter
+func newParameter(configFile, stanza, name, title, description, defaultValue, placeholder string, uiType ParamType, required bool) (*Param, error) {
+	if name == "" {
+		return nil, utils.NewErrInvalidParam("newParam", nil, "'name' cannot be empty")
+	}
+	if title == "" {
+		return nil, utils.NewErrInvalidParam("newParam", nil, "'title' cannot be empty for '%s'", name)
+	}
+	if configFile != "" || stanza != "" {
+		if configFile == "" {
+			return nil, utils.NewErrInvalidParam("newParam", nil, "'configFile' cannot be empty for '%s'", name)
+		}
+		if stanza == "" {
+			return nil, utils.NewErrInvalidParam("newParam", nil, "'stanza' cannot be empty for '%s'", name)
+		}
+		configFile = strings.TrimSuffix(configFile, ".conf")
+	}
+
+	if !(uiType == 0 || uiType == ParamTypeText || uiType == ParamTypeTextArea || uiType == ParamTypeSearchDropdown || uiType == ParamTypeRadio || uiType == ParamTypeDropdown || uiType == ParamTypeColorPicker) {
+		return nil, utils.NewErrInvalidParam("newParam", nil, "'uiType' should either be 0 or one of the allowed ParamTypes")
+	}
+
+	param := &Param{
+		ConfigFile:   configFile,
+		Stanza:       stanza,
+		Title:        title,
+		Name:         name,
+		UIType:       uiType,
+		Description:  description,
+		Placeholder:  placeholder,
+		DefaultValue: defaultValue,
+		Required:     required,
+	}
+	return param, nil
 }
 
 // AddChoice adds another valid choice to the set of acceptable ones. This is useful for Dropdown/Radio parameters,
@@ -90,7 +145,7 @@ func (p *Param) AddChoice(value, visibleValue string) error {
 
 // setValue sets the run-time value of the parameter. It performs validation of the value based on the parameter's configurations such as AvailableChoices.
 // Returns an error in case the validation failed
-func (p *Param) SetValue(v string) error {
+func (p *Param) setValue(v string) error {
 	v = strings.TrimSpace(v)
 	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
 	if len(p.availableOptions) > 0 {
@@ -111,7 +166,7 @@ func (p *Param) SetValue(v string) error {
 	return nil
 }
 
-// getValue returns the run-time value which was set for this parameter, or its DefaultValue in case no value has been set
+// GetValue returns the run-time value which was set for this parameter, or its DefaultValue in case no value has been set
 // It substitutes env variables in the $var and ${var} within the value
 func (p *Param) GetValue() string {
 	if p.actualValueIsSet {
@@ -119,30 +174,6 @@ func (p *Param) GetValue() string {
 	}
 	return os.ExpandEnv(p.DefaultValue)
 }
-
-/*
-func (gp *GlobalParam) GetValue(ss *client.SplunkService) (string, error) {
-	if gp.actualValueIsSet {
-		return gp.actualValue, nil
-	}
-	if ss == nil {
-		return "", fmt.Errorf("globalParam GetValue: reference to splunk service cannot be nil")
-	}
-	col := ss.GetConfigs(gp.ConfigFile)
-	stanza, err := col.GetStanza(gp.Stanza)
-	if err != nil {
-		return "", fmt.Errorf("globalParam GetValue: %w", err)
-	}
-	v, err := stanza.GetString(gp.Name)
-	if err != nil {
-		return "", fmt.Errorf("globalParam GetValue: %w", err)
-	}
-	v = os.ExpandEnv(v)
-	gp.actualValue = v
-	gp.actualValueIsSet = true
-	return v, nil
-}
-*/
 
 // GetChoices returns a list of the internal values of the acceptable options for the parameter.
 // If there are no acceptable choices, it returns an empty slice.

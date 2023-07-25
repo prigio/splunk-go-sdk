@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,11 +21,11 @@ import (
 // this is used to modify the logging format
 var isAtTerminal = isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
 
-// AlertFunc is the signature of the function used to execute the AlertAction based on configurations provided on STDIN
-type AlertFunc func(*AlertAction) error
-
-// ValidateFunc is the signature of the function used to validate the run-time parameters provided to the AlertAction.
-type ValidateFunc func(*AlertAction) error
+// AlertingFunc is the signature required for the functions responsible for:
+//
+//  1. Validate the run-time parameters provided to the AlertAction.
+//  2. Execute the actual AlertAction based on configurations provided on STDIN
+type AlertingFunc func(*AlertAction) error
 
 // AlertAction is the main structure defining how an alert action looks like.
 // It provides a way for the user to define a Splunk alert action and makes
@@ -51,10 +50,10 @@ type AlertAction struct {
 	globalParams []*Param
 
 	// validateParams is an optional function which can be used to validate the run-time parameters
-	validateParams ValidateFunc
+	validateParams AlertingFunc
 
 	// Execute is a mandatory function used to perform actual alert tasks. This is called by the alert's "Run" method.
-	execute AlertFunc
+	execute AlertingFunc
 
 	// This debug setting is meant for facilitating development and is not configurable by a user through splunk's inputs.conf
 	debug bool
@@ -99,40 +98,39 @@ func (aa *AlertAction) EnableDebug() {
 	aa.debug = true
 }
 
-// AddParam adds a new parameter to the alert action.
-// The argument is additionally returned for further processing, if needed.
-func (aa *AlertAction) AddParam(name, title, description, defaultValue, placeholder string, uiType ParamType, required bool) (*Param, error) {
-	if name == "" {
-		return nil, utils.NewErrInvalidParam("addParam", nil, "'name' cannot be empty")
-	}
-	if title == "" {
-		return nil, utils.NewErrInvalidParam("addParam", nil, "'title' cannot be empty")
-	}
-	if !(uiType == 0 || uiType == ParamTypeText || uiType == ParamTypeTextArea || uiType == ParamTypeSearchDropdown || uiType == ParamTypeRadio || uiType == ParamTypeDropdown || uiType == ParamTypeColorPicker) {
-		return nil, utils.NewErrInvalidParam("addParam", nil, "'uiType' should either be 0 or one of the allowed ParamTypes")
-	}
-
+// RegisterParam adds a given parameter to the alert action.
+func (aa *AlertAction) RegisterParam(p *Param) error {
 	// check if the parameter is already present
 	// return error in case it is already there
-	if _, err := aa.GetParam(name); err == nil {
-		return nil, utils.NewErrInvalidParam("addParam", nil, "not possible to add multiple parameters having the same name. name=\"%s\"", name)
+	if _, err := aa.GetParam(p.Name); err == nil {
+		return utils.NewErrInvalidParam("registerParam", nil, "parameter with name '%s' already existing", p.Name)
 	}
-
 	if aa.params == nil {
 		aa.params = make([]*Param, 0, 1)
 	}
-	param := &Param{
-		Title:        title,
-		Name:         name,
-		UIType:       uiType,
-		Description:  description,
-		Placeholder:  placeholder,
-		DefaultValue: defaultValue,
-		Required:     required,
-	}
+	aa.params = append(aa.params, p)
+	return nil
+}
 
-	aa.params = append(aa.params, param)
-	return param, nil
+// RegisterNewParam adds a new parameter to the alert action.
+// The argument is additionally returned for further processing, if needed.
+func (aa *AlertAction) RegisterNewParam(name, title, description, defaultValue, placeholder string, uiType ParamType, required bool) (*Param, error) {
+	var p *Param
+	var err error
+	// check if the parameter is already present
+	// return error in case it is already there
+	if _, err = aa.GetParam(name); err == nil {
+		return nil, utils.NewErrInvalidParam("registerNewParam", nil, "parameter with name '%s' already existing", name)
+	}
+	p, err = newParameter("", "", name, title, description, defaultValue, placeholder, uiType, required)
+	if err != nil {
+		return nil, fmt.Errorf("registerNewParam: %w", err)
+	}
+	if aa.params == nil {
+		aa.params = make([]*Param, 0, 1)
+	}
+	aa.params = append(aa.params, p)
+	return p, nil
 }
 
 // GetParam searches for the param having the provided name.
@@ -157,43 +155,40 @@ func (aa *AlertAction) GetParamNames() []string {
 
 // RegisterGlobalParam adds a new parameter to the alert action.
 // The argument is additionally returned for further processing, if needed.
-func (aa *AlertAction) RegisterGlobalParam(configFile, stanza, name, title, description, defaultValue string, required bool) (*Param, error) {
-	configFile = strings.TrimSuffix(configFile, ".conf")
-	if name == "" {
-		return nil, utils.NewErrInvalidParam("registerGlobalParam", nil, "'name' cannot be empty")
-	}
-	if configFile == "" {
-		return nil, utils.NewErrInvalidParam("registerGlobalParam", nil, "'configFile' cannot be empty for parameter '%s'", name)
-
-	}
-	if stanza == "" {
-		return nil, utils.NewErrInvalidParam("registerGlobalParam", nil, "'stanza' cannot be empty for parameter '%s'", name)
-	}
-	if title == "" {
-		return nil, utils.NewErrInvalidParam("registerGlobalParam", nil, "'title' cannot be empty for parameter '%s'", name)
-	}
+func (aa *AlertAction) RegisterGlobalParam(p *Param) error {
 	// check if the parameter is already present
 	// return error in case it is already there
-	if _, err := aa.GetGlobalParam(name); err == nil {
-		return nil, utils.NewErrInvalidParam("registerGlobalParam", nil, "parameter with name '%s' already existing", name)
+	if _, err := aa.GetGlobalParam(p.Name); err == nil {
+		return utils.NewErrInvalidParam("registerGlobalParam", nil, "parameter with name '%s' already existing", p.Name)
 	}
 
 	if aa.globalParams == nil {
 		aa.globalParams = make([]*Param, 0, 1)
 	}
 
-	param := &Param{
-		ConfigFile:   configFile,
-		Stanza:       stanza,
-		Title:        title,
-		Name:         name,
-		Description:  description,
-		DefaultValue: defaultValue,
-		Required:     required,
-	}
+	aa.globalParams = append(aa.globalParams, p)
+	return nil
+}
 
-	aa.globalParams = append(aa.globalParams, param)
-	return param, nil
+// RegisterNewGlobalParam adds a new parameter to the alert action.
+// The argument is additionally returned for further processing, if needed.
+func (aa *AlertAction) RegisterNewGlobalParam(configFile, stanza, name, title, description, defaultValue string, required bool) (*Param, error) {
+	var p *Param
+	var err error
+	// check if the parameter is already present
+	// return error in case it is already there
+	if _, err = aa.GetGlobalParam(name); err == nil {
+		return nil, utils.NewErrInvalidParam("registerNewGlobalParam", nil, "parameter with name '%s' already existing", name)
+	}
+	p, err = newParameter(configFile, stanza, name, title, description, defaultValue, "", 0, required)
+	if err != nil {
+		return nil, fmt.Errorf("registerNewGlobalParam: %w", err)
+	}
+	if aa.params == nil {
+		aa.globalParams = make([]*Param, 0, 1)
+	}
+	aa.globalParams = append(aa.params, p)
+	return p, nil
 }
 
 // GetGlobalParam searches for the global param having the provided name.
@@ -349,7 +344,7 @@ func (aa *AlertAction) initRuntime(c *alertConfig) error {
 	if err := aa.setSplunkService(); err != nil {
 		return fmt.Errorf("initRuntime: %w", err)
 	}
-	if err := aa.setLogger(); err != nil {
+	if err := aa.registerLogger(); err != nil {
 		return fmt.Errorf("initRuntime: %w", err)
 	}
 
@@ -374,7 +369,8 @@ func (aa *AlertAction) setGlobalParams() error {
 	var loggedVal string
 	var err error
 	for _, param := range aa.globalParams {
-		configsCollection = aa.splunkd.GetConfigs(param.ConfigFile)
+		configsCollection = splunkd.NewConfigsCollectionNS(aa.splunkd, param.ConfigFile, aa.GetOwner(), aa.GetApp())
+
 		stanza, err = configsCollection.GetStanza(param.Stanza)
 		if err != nil {
 			return fmt.Errorf("setGlobalParams: stanza '%s' not found in config '%s'. %w", param.Stanza, param.ConfigFile, err)
@@ -392,7 +388,7 @@ func (aa *AlertAction) setGlobalParams() error {
 				loggedVal = "***masked***"
 			}
 			aa.Log("INFO", "Setting global parameter %s:[%s]/%s=\"%s\"", param.ConfigFile, param.Stanza, param.Name, loggedVal)
-			param.SetValue(val)
+			param.setValue(val)
 		}
 	}
 	return nil
@@ -413,7 +409,7 @@ func (aa *AlertAction) setParams() error {
 				loggedVal = "***masked***"
 			}
 			aa.Log("INFO", "Setting parameter %s=\"%s\"", param.Name, loggedVal)
-			if err := param.SetValue(v); err != nil {
+			if err := param.setValue(v); err != nil {
 				return fmt.Errorf("esetParams: rror while applying run-time configuration: %s", err.Error())
 			}
 		} else {
@@ -426,14 +422,14 @@ func (aa *AlertAction) setParams() error {
 // RegisterValidationFunc configures a function used to validate parameters.
 // Basic parameter validation is done automatically. This is needed to check for dependencies across multiple parameters.
 // Providing a validation function is optional.
-func (aa *AlertAction) RegisterValidationFunc(f ValidateFunc) {
+func (aa *AlertAction) RegisterValidationFunc(f AlertingFunc) {
 	aa.Log("DEBUG", "Custom parameter validation function registered")
 	aa.validateParams = f
 }
 
 // RegisterAlertFunc configures the actual alerting function to be executed by the alert action.
 // Not providing a function results in a run-time error, as the alert action would not know what to actually do.
-func (aa *AlertAction) RegisterAlertFunc(f AlertFunc) {
+func (aa *AlertAction) RegisterAlertFunc(f AlertingFunc) {
 	aa.Log("DEBUG", "Alerting function registered")
 	aa.execute = f
 }

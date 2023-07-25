@@ -15,9 +15,9 @@ func (aa *AlertAction) getLoggingSourcetype() string {
 	return "alertaction:" + aa.StanzaName
 }
 
-// setLogger configures the splunkd-based logger
+// registerLogger configures the splunkd-based logger
 // A runtime configuration must be already available when performing this method.
-func (aa *AlertAction) setLogger() error {
+func (aa *AlertAction) registerLogger() error {
 	if aa.splunkdlogger != nil {
 		// already available
 		return nil
@@ -61,9 +61,9 @@ func (aa *AlertAction) Log(level string, message string, a ...interface{}) {
 	}
 }
 
-// SetEndUserLogger configures logging to report to the end-user the results of the alert execution.
+// RegisterEndUserLogger configures logging to report to the end-user the results of the alert execution.
 // Messages will be logged into the specified index and can have a custom prefix added to them.
-func (aa *AlertAction) SetEndUserLogger(index, messagePrefix string) error {
+func (aa *AlertAction) RegisterEndUserLogger(index, messagePrefix string) error {
 	if aa.splunkd == nil {
 		// already available
 		return fmt.Errorf("alert action setEndUserLogger: no splunkd client available. This operation must be performed when a runtime config is available")
