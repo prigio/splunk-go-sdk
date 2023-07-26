@@ -85,8 +85,30 @@ func NewFromDefaults() (*Client, error) {
 	return New(fmt.Sprintf("%s://%s:%d", defaultScheme, defaultHost, defaultPort), true, "")
 }
 
+// NewInteractive uses the Params[] definition of an alert action to prepare a configuration based on:
+// - command line parameters
+// - interactively asking the user if no command-line parameter was found for an argument
+func NewInteractive() (*Client, error) {
+	// first, need to get splunk endpoint, username and password to be able to login into the service if necessary.
+	uri := utils.AskForInput("Splunkd URL", "https://localhost:8089", false)
+	username := utils.AskForInput("Splunk username", "admin", false)
+	password := utils.AskForInput("Splunk password", "", true)
+	ss, err := New(uri, true, "")
+	if err != nil {
+		return nil, fmt.Errorf("connection failed to splunkd on '%s'. %w", uri, err)
+	}
+	if err = ss.Login(username, password, ""); err != nil {
+		return nil, fmt.Errorf("login failed to splunkd with username '%s': %w", username, err)
+	}
+	return ss, nil
+}
+
 func (ss *Client) GetSessionKey() string {
 	return ss.sessionKey
+}
+
+func (ss *Client) GetSplunkdURI() string {
+	return ss.baseUrl
 }
 
 //func (ss *SplunkService) getCollection(method, urlPath string, body io.Reader) (httpCode int, respBody []byte, err error) {
