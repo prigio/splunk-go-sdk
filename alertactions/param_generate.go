@@ -130,7 +130,6 @@ func (p *Param) getCustomSpec() string {
 // getDocumentation returns a markdown-formatted list-item which describes the parameter
 func (p *Param) getDocumentation() string {
 	buf := new(strings.Builder)
-	fmt.Fprint(buf, "- ")
 	if p.ConfigFile != "" && p.Stanza != "" {
 		// this is a global parameter
 		configFile := p.ConfigFile
