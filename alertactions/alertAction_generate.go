@@ -292,42 +292,42 @@ func (aa *AlertAction) getAlertConfigInteractive() (*alertConfig, error) {
 	// first, need to get splunk endpoint, username and password to be able to login into the service if necessary.
 	ic := &alertConfig{}
 	fmt.Println("Interactively provide information to access local splunkd service.")
-	ic.ServerUri = utils.AskForInput("Splunkd URL", "https://localhost:8089", false)
-	username := utils.AskForInput("Splunk username", "admin", false)
-	password := utils.AskForInput("Splunk password", "", true)
-	ss, err := splunkd.New(ic.ServerUri, true, "")
+	ss, err := splunkd.NewInteractive()
 	if err != nil {
-		return nil, fmt.Errorf("connection failed to splunkd on '%s'. %w", ic.ServerUri, err)
+		return nil, fmt.Errorf("getAlertConfigInteractive: %w", err)
 	}
-	if err = ss.Login(username, password, ""); err != nil {
-		return nil, fmt.Errorf("login failed to splunkd on with username '%s': %w", username, err)
-	}
-
-	ic.SessionKey = ss.GetSessionKey()
 	ic.App = utils.AskForInput("Splunk app context", "", false)
-	ic.Owner = username
+
+	ic.ServerUri = ss.GetSplunkdURI()
+	ic.SessionKey = ss.GetSessionKey()
+	if splunkdCtx, err := ss.AuthContext(); err != nil {
+		ic.Owner = splunkdCtx.Username
+	}
+	if splunkInfo, err := ss.Info(); err != nil {
+		ic.ServerHost = splunkInfo.ServerName
+	}
 	//ic.ResultsFile =
 	//ic.ResultsLink =
-	//ic.ServerHost =
 	ic.SearchUri = "interactive search"
 	ic.Sid = "sid of interactive search"
 	ic.SearchName = "interactive search"
+
+	// in case the alert uses global parameters, ask for them
+	if len(aa.globalParams) > 0 {
+		resp := utils.AskForInput("Do you want to specify global parameters manually (y), or get their value from splunk (n)", "n", false)
+		if strings.ToLower(resp) == "y" {
+			for _, p := range aa.globalParams {
+				pVal := utils.AskForInput(p.Title, p.DefaultValue, p.Sensitive)
+				p.setValue(pVal)
+			}
+		}
+	}
+
 	fmt.Println("Interactively provide values for alert action parameters.")
 	ic.Configuration = make(map[string]string)
 	for _, p := range aa.params {
 		ic.Configuration[p.Name] = utils.AskForInput(p.Title, p.DefaultValue, false)
 	}
-
-	/*
-		for seq, arg := range aa.Args {
-			prompt = fmt.Sprintf("Provide parameter %s (%s, '%s')", arg.Title, arg.DataType, arg.Name)
-			if arg.Description != "" {
-				prompt = fmt.Sprintf("%s\n    %s\n", prompt, arg.Description)
-			}
-			val = AskForInput(prompt, arg.DefaultValue, false)
-			stanza.Params[seq] = Param{Name: arg.Name, Value: val}
-		}
-	*/
 
 	return ic, nil
 }

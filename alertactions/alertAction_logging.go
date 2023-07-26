@@ -71,27 +71,27 @@ func (aa *AlertAction) RegisterEndUserLogger(index, messagePrefix string) error 
 	if index == "" {
 		return fmt.Errorf("alert action setEndUserLogger: index parameter cannot be emtpy")
 	}
+	sourcetype := "alertaction:" + aa.StanzaName
 	// initialize a logger to perform logging visible by the end user
-	aa.endUserLogger = aa.splunkd.NewLogger(messagePrefix, 0, index, "", fmt.Sprintf("Alert [%s] %s", aa.GetApp(), aa.GetSearchName()), "alertaction:"+aa.StanzaName)
+	aa.Log("INFO", "Will be logging results of executions for the end-user as index=\"%s\" sourcetype=\"\"", index, sourcetype)
+	aa.endUserLogger = aa.splunkd.NewLogger(messagePrefix, 0, index, "", fmt.Sprintf("Alert [%s] %s", aa.GetApp(), aa.GetSearchName()), sourcetype)
 	return nil
 }
 
-// Log writes a log so that it can be read by Splunk.
+// LogForEndUser writes a log to an index visible for the end-user of the alert in order to report on
+// the alert execution.
+// It is NECESSARY to first initialize the logger using [RegisterEndUserLogger].
+// This method SILENTLY FAILS if used without proper initialization.
 // Argument 'message' can use formatting markers as fmt.Sprintf. Aditional arguments 'a' will be provided to fmt.Sprintf
 func (aa *AlertAction) LogForEndUser(level string, message string, a ...interface{}) {
+	if aa.endUserLogger == nil {
+		return
+	}
 	level = strings.ToUpper(level)
 	message = fmt.Sprintf("%s %s - %s\n",
 		time.Now().Round(time.Millisecond).Format("2006-01-02T15:04:05.000-0700"),
 		level,
 		message)
 
-	// isAtTerminal is global, set at the beginning of this file, in order to only do this once per execution
-	if isAtTerminal {
-		fmt.Fprintf(os.Stderr, message, a...)
-	} else if aa.endUserLogger != nil {
-		aa.endUserLogger.Printf(message, a...)
-	} else {
-		// log an internal message if it was not possible to log as needed.
-		aa.Log("ERROR", "Alert action requested logging for end-user, but this has not been initialized. Original message: %s\n", message)
-	}
+	aa.endUserLogger.Printf(message, a...)
 }

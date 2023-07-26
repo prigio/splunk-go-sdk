@@ -184,10 +184,10 @@ func (aa *AlertAction) RegisterNewGlobalParam(configFile, stanza, name, title, d
 	if err != nil {
 		return nil, fmt.Errorf("registerNewGlobalParam: %w", err)
 	}
-	if aa.params == nil {
+	if aa.globalParams == nil {
 		aa.globalParams = make([]*Param, 0, 1)
 	}
-	aa.globalParams = append(aa.params, p)
+	aa.globalParams = append(aa.globalParams, p)
 	return p, nil
 }
 
@@ -369,26 +369,29 @@ func (aa *AlertAction) setGlobalParams() error {
 	var loggedVal string
 	var err error
 	for _, param := range aa.globalParams {
-		configsCollection = splunkd.NewConfigsCollectionNS(aa.splunkd, param.ConfigFile, aa.GetOwner(), aa.GetApp())
+		// in case the value of the parameter has been set interactively, skip looking for it within splunk
+		if !param.actualValueIsSet {
+			configsCollection = splunkd.NewConfigsCollectionNS(aa.splunkd, param.ConfigFile, aa.GetOwner(), aa.GetApp())
 
-		stanza, err = configsCollection.GetStanza(param.Stanza)
-		if err != nil {
-			return fmt.Errorf("setGlobalParams: stanza '%s' not found in config '%s'. %w", param.Stanza, param.ConfigFile, err)
-		}
-		if val, err := stanza.GetString(param.Name); err != nil {
-			if param.Required {
-				return fmt.Errorf("setGlobalParams: required parameter not found '%s:[%s]/%s'", param.ConfigFile, param.Stanza, param.Name)
+			stanza, err = configsCollection.GetStanza(param.Stanza)
+			if err != nil {
+				return fmt.Errorf("setGlobalParams: stanza '%s' not found in config '%s'. %w", param.Stanza, param.ConfigFile, err)
 			}
-			aa.Log("WARN", "Global parameter %s:[%s]/%s not found. Using default value", param.ConfigFile, param.Stanza, param.Name)
-		} else if val == "" && param.DefaultValue == "" && param.Required {
-			return fmt.Errorf("setGlobalParams: required parameter cannot have emtpy value '%s:[%s]/%s'", param.ConfigFile, param.Stanza, param.Name)
-		} else if val != "" {
-			loggedVal = val
-			if param.Sensitive {
-				loggedVal = "***masked***"
+			if val, err := stanza.GetString(param.Name); err != nil {
+				if param.Required {
+					return fmt.Errorf("setGlobalParams: required parameter not found '%s:[%s]/%s'", param.ConfigFile, param.Stanza, param.Name)
+				}
+				aa.Log("WARN", "Global parameter %s:[%s]/%s not found. Using default value", param.ConfigFile, param.Stanza, param.Name)
+			} else if val == "" && param.DefaultValue == "" && param.Required {
+				return fmt.Errorf("setGlobalParams: required parameter cannot have emtpy value '%s:[%s]/%s'", param.ConfigFile, param.Stanza, param.Name)
+			} else if val != "" {
+				loggedVal = val
+				if param.Sensitive {
+					loggedVal = "***masked***"
+				}
+				aa.Log("INFO", "Setting global parameter %s:[%s]/%s=\"%s\"", param.ConfigFile, param.Stanza, param.Name, loggedVal)
+				param.setValue(val)
 			}
-			aa.Log("INFO", "Setting global parameter %s:[%s]/%s=\"%s\"", param.ConfigFile, param.Stanza, param.Name, loggedVal)
-			param.setValue(val)
 		}
 	}
 	return nil
@@ -523,7 +526,7 @@ func (aa *AlertAction) Run(args []string, stdin io.Reader, stdout, stderr io.Wri
 
 	if *interactivePtr {
 		if runTimeConfig, err = aa.getAlertConfigInteractive(); err != nil {
-			aa.Log("FATAL", "Errow when preparing execution configuration: %s", err.Error())
+			aa.Log("FATAL", "Error when preparing execution configuration: %s", err.Error())
 			return err
 		} else {
 			aa.Log("DEBUG", "Setting run-time configuration: %+v", runTimeConfig)
