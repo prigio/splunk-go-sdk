@@ -23,18 +23,25 @@ const (
 	ArgDataTypeNumber                         = "number"
 )
 
-// GenerateArgValidationComplex returns a string which can be used to within a modular input "scheme" definition how Splunk's UI should validate the given parameter
-// The user provides the exact validatioin clause to be used and the error message to be displayed to the used in case of failed validation
+// GenerateArgValidation returns a string which can be used within a modular input "scheme" definition to tell how Splunk's UI should validate the given parameter
+// Available validations are listed as modinputs.ArgValidation*
+// See https://docs.splunk.com/Documentation/SplunkCloud/latest/AdvancedDev/ModInputsScripts#Validation_of_arguments for more info
+func GenerateArgValidation(paramName string, validation ArgValidation) string {
+	return fmt.Sprintf("%s(%s)", string(validation), paramName)
+}
+
+// GenerateArgValidationComplex returns a string which can be used within a modular input "scheme" definition to tell how Splunk's UI should validate the given parameter
+// The user provides the exact validatioin clause to be used and the error message to be displayed to the user in case of failed validation
 // See https://docs.splunk.com/Documentation/SplunkCloud/latest/AdvancedDev/ModInputsScripts#Validation_of_arguments for more info
 func GenerateArgValidationComplex(paramName, checkClause, errorMessage string) string {
 	return fmt.Sprintf("validate(%s, \"%s\")", checkClause, strings.ReplaceAll(errorMessage, "\"", "'"))
 }
 
-// GenerateArgValidation returns a string which can be used to within a modular input "scheme" definition how Splunk's UI should validate the given parameter
-// Available validations are listed as modinputs.ArgValidation*
+// GenerateArgValidationRegex returns a string which can be used within a modular input "scheme" definition to tell how Splunk's UI should validate the given parameter
+// The user provides the exact parameter name, a textual PCRE regular expression and the error message to be displayed to the user in case of failed validation
 // See https://docs.splunk.com/Documentation/SplunkCloud/latest/AdvancedDev/ModInputsScripts#Validation_of_arguments for more info
-func GenerateArgValidation(paramName string, validation ArgValidation) string {
-	return fmt.Sprintf("%s(%s)", string(validation), paramName)
+func GenerateArgValidationRegex(paramName, regex, errorMessage string) string {
+	return fmt.Sprintf("validate(match('%s',\"%s\"), \"%s\")", paramName, strings.ReplaceAll(regex, "\"", "\\\""), strings.ReplaceAll(errorMessage, "\"", "'"))
 }
 
 // Parameters used by the ModularInput.
