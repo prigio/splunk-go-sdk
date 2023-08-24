@@ -7,11 +7,7 @@ import (
 )
 
 func TestKVStoreList(t *testing.T) {
-	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	ss.Login(testing_user, testing_password, testing_mfaCode)
+	ss := mustLoginToSplunk(t)
 
 	kvc := ss.GetKVStore()
 
@@ -26,11 +22,7 @@ func TestKVStoreList(t *testing.T) {
 }
 
 func TestKVStoreCreate(t *testing.T) {
-	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	ss.Login(testing_user, testing_password, testing_mfaCode)
+	ss := mustLoginToSplunk(t)
 
 	kvc := ss.GetKVStore()
 	collectionName := "test-collection-" + uuid.New().String()[0:8]
@@ -51,18 +43,15 @@ func TestKVStoreCreate(t *testing.T) {
 	}
 
 	t.Logf("INFO Deleting KVStore collection '%s'", collectionName)
-	if err = kvce.Delete(ss); err != nil {
+	t.Logf("INFO %s", kvce.Links.Remove)
+	if err = kvc.DeleteEntry(kvce); err != nil {
 		t.Error(err)
 	}
 
 }
 
 func TestKVStoreDataManagement(t *testing.T) {
-	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	ss.Login(testing_user, testing_password, testing_mfaCode)
+	ss := mustLoginToSplunk(t)
 
 	kvc := ss.GetKVStore()
 	collectionName := "test-collection-" + uuid.New().String()[0:8]
@@ -98,8 +87,7 @@ func TestKVStoreDataManagement(t *testing.T) {
 	}
 
 	t.Logf("INFO Deleting KVStore collection '%s'", collectionName)
-	if err = kvce.Delete(ss); err != nil {
+	if err = kvc.DeleteEntry(kvce); err != nil {
 		t.Error(err)
 	}
-
 }

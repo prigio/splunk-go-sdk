@@ -87,8 +87,8 @@ sort=surname:-1,firstname:1 (Sort by surname, descending, after firstname, ascen
 sort=surname:1,first name (Sort by surname, ascending, after firstname, ascending
 shared - Defaults to false. Set to true to return records for the specified user as well as records for the nobody user.
 */
-func (entry *collectionEntry[KVStoreCollResource]) Query(ss *Client, query, fields, sort string, limit, skip int, shared bool, storeJSONResultInto *[]map[string]interface{}) error {
-	ctx := fmt.Sprintf("kvstore[%s] query", entry.Name)
+func (e *entry[KVStoreCollResource]) Query(ss *Client, query, fields, sort string, limit, skip int, shared bool, storeJSONResultInto *[]map[string]interface{}) error {
+	ctx := fmt.Sprintf("kvstore[%s] query", e.Name)
 	if ss == nil {
 		return utils.NewErrInvalidParam(ctx, nil, "'splunkService' cannot be nil")
 	}
@@ -99,7 +99,7 @@ func (entry *collectionEntry[KVStoreCollResource]) Query(ss *Client, query, fiel
 		return utils.NewErrInvalidParam(ctx, nil, "'storeJSONResultInto' cannot be nil")
 	}
 
-	dataURL := strings.ReplaceAll(entry.Links.List, "/collections/config/", "/collections/data/")
+	dataURL := strings.ReplaceAll(e.Links.List, "/collections/config/", "/collections/data/")
 	queryParams := url.Values{}
 	queryParams.Set("query", query)
 	if sort != "" {
@@ -112,20 +112,20 @@ func (entry *collectionEntry[KVStoreCollResource]) Query(ss *Client, query, fiel
 		queryParams.Set("skip", strconv.FormatInt(int64(skip), 10))
 	}
 	if err := doSplunkdHttpRequest(ss, "GET", dataURL, &queryParams, nil, "", storeJSONResultInto); err != nil {
-		return fmt.Errorf("kvstore[%s] query: %w", entry.Name, err)
+		return fmt.Errorf("kvstore[%s] query: %w", e.Name, err)
 	}
 	return nil
 }
 
-func (entry *collectionEntry[KVStoreCollResource]) Insert(ss *Client, jsondata string) (key string, err error) {
-	ctx := fmt.Sprintf("kvstore[%s] insert", entry.Name)
+func (e *entry[KVStoreCollResource]) Insert(ss *Client, jsondata string) (key string, err error) {
+	ctx := fmt.Sprintf("kvstore[%s] insert", e.Name)
 	if ss == nil {
 		return "", utils.NewErrInvalidParam(ctx, nil, "'splunkService' cannot be nil")
 	}
 	if jsondata == "" {
 		return "", utils.NewErrInvalidParam(ctx, nil, "'jsondata' cannot be empty")
 	}
-	dataURL := strings.ReplaceAll(entry.Links.List, "/collections/config/", "/collections/data/")
+	dataURL := strings.ReplaceAll(e.Links.List, "/collections/config/", "/collections/data/")
 	dataRes := make(map[string]string, 0)
 	if err = doSplunkdHttpRequest(ss, "POST", dataURL, nil, []byte(jsondata), "application/json", &dataRes); err != nil {
 		return "", fmt.Errorf("%s: %w", ctx, err)
@@ -148,7 +148,7 @@ func NewKVStoreCollCollection(ss *Client) *KVStoreCollCollection {
 	return col
 }
 
-func (col *KVStoreCollCollection) CreateKVStoreColl(ns *Namespace, entryName string, fields map[string]string, acceleratedFields map[string]string, enforceTypes bool, replicate bool) (*collectionEntry[KVStoreCollResource], error) {
+func (col *KVStoreCollCollection) CreateKVStoreColl(ns *Namespace, entryName string, fields map[string]string, acceleratedFields map[string]string, enforceTypes bool, replicate bool) (*entry[KVStoreCollResource], error) {
 	params := url.Values{}
 	params.Set("name", entryName)
 	params.Set("replicate", fmt.Sprintf("%v", replicate))

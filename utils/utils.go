@@ -159,3 +159,51 @@ func GetEpochNow() float64 {
 func GetEpoch(t time.Time) float64 {
 	return float64(t.UnixNano()) / 1000000000.0
 }
+
+// In checks presence of 'elemet' within slice 'set'
+func In[T comparable](element T, set []T) bool {
+	for _, value := range set {
+		if element == value {
+			return true
+		}
+	}
+	return false
+}
+
+// IsSubset returns true if the 'subset' array is completely
+// contained in the 'set' array. There must be at least
+// the same number of duplicate values in 'set' as there
+// are in 'subset'.
+func IsSubset[T comparable](subset, set []T) bool {
+	founds := make(map[T]int)
+	for _, value := range set {
+		founds[value] += 1
+	}
+
+	for _, value := range subset {
+		if count, found := founds[value]; !found {
+			return false
+		} else if count < 1 {
+			return false
+		} else {
+			founds[value] = count - 1
+		}
+	}
+
+	return true
+}
+
+// ListOfVals accesses a list of composite values 'source' of type T, applies the 'accessor' function
+// to it to extract a value of type PT and retusn a list of the extracted values []PT.
+// Elements of the resulting list are in the same order as found in the 'source' list
+// Limitations: T must be an addressable type
+func ListOfVals[T any, PT any](source []T, accessor func(*T) PT) []PT {
+	if len(source) == 0 {
+		return make([]PT, 0)
+	}
+	res := make([]PT, 0, len(source))
+	for _, elem := range source {
+		res = append(res, accessor(&elem))
+	}
+	return res
+}

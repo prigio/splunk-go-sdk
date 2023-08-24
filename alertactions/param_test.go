@@ -9,12 +9,12 @@ func TestParamValues(t *testing.T) {
 		Title:        "title",
 		Name:         "name",
 		Description:  "descr",
-		DefaultValue: "a default",
-		Placeholder:  "a placeholder",
-		Required:     false,
+		defaultValue: "a default",
+		placeholder:  "a placeholder",
+		required:     false,
 	}
 
-	if p.GetValue() != p.DefaultValue {
+	if p.GetValue() != p.defaultValue {
 		t.Errorf("Parameter did not return correct default value")
 	}
 	p.setValue("a value")
@@ -33,9 +33,9 @@ func TestParamAcceptableValues(t *testing.T) {
 		Title:        "title",
 		Name:         "name",
 		Description:  "descr",
-		DefaultValue: "a default",
-		Placeholder:  "a placeholder",
-		Required:     false,
+		defaultValue: "a default",
+		placeholder:  "a placeholder",
+		required:     false,
 	}
 
 	if p.GetChoices() == nil {
@@ -54,7 +54,7 @@ func TestParamAcceptableValues(t *testing.T) {
 
 	p.AddChoice("c2", "Choice 2")
 
-	if p.GetValue() != p.DefaultValue {
+	if p.GetValue() != p.defaultValue {
 		t.Error("Parameter did not return correct default value")
 	}
 	if err := p.setValue("not accepted value"); err == nil {

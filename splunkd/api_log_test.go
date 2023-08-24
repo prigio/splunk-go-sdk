@@ -6,11 +6,7 @@ import (
 )
 
 func TestLogger(t *testing.T) {
-	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	ss.Login(testing_user, testing_password, testing_mfaCode)
+	ss := mustLoginToSplunk(t)
 
 	logger := ss.NewLogger("testLogger", log.Ldate|log.Ltime|log.Lmicroseconds|log.Lmsgprefix, "main", "", "go-test", "go-test")
 	t.Logf("Writing test messages into index=%s, sourcetype=%s\n", "main", "go-test")

@@ -12,17 +12,18 @@ func TestAddArgument(t *testing.T) {
 		name             string
 		title            string
 		description      string
+		defaultValue     string
 		dataType         string
 		validation       string
 		requiredOnCreate bool
 		requireOnEdit    bool
 	}{
-		{"param1", "Param1", "A string parameter", ArgDataTypeStr, "", true, false},
-		{"param2", "Param2", "A numeric parameter", ArgDataTypeNumber, "", true, true},
+		{"param1", "Param1", "A string parameter", "", ArgDataTypeStr, "", true, false},
+		{"param2", "Param2", "A numeric parameter", "", ArgDataTypeNumber, "", true, true},
 	}
 
 	for i, v := range cases {
-		mi.AddArgument(v.name, v.title, v.description, v.dataType, v.validation, v.requiredOnCreate, v.requireOnEdit)
+		mi.RegisterNewParam(v.name, v.title, v.description, v.dataType, v.defaultValue, v.validation, v.requiredOnCreate, v.requireOnEdit)
 		if len(mi.Args) != i+1 {
 			t.Errorf("Argument %s not added", v.name)
 		}
@@ -42,10 +43,10 @@ func TestSchemeXML(t *testing.T) {
 		StanzaName:            "teststanzaname",
 		Title:                 "Test Scheme",
 		Description:           "This is the description of the test scheme",
-		UseExternalValidation: false,
-		UseSingleInstance:     false,
+		useExternalValidation: false,
+		useSingleInstance:     false,
 	}
-	mi.AddArgument("one", "Param one", "Test parameter one, of string type, without validation", ArgDataTypeStr, "", true, true)
+	mi.RegisterNewParam("one", "Param one", "Test parameter one, of string type, without validation", "", ArgDataTypeStr, "", true, true)
 
 	// when modifying this, you need to pay attention that the editor
 	// may want to substitute spaces with tabs, thus causing tests to fail.
@@ -80,8 +81,8 @@ func TestEvent(t *testing.T) {
 		StanzaName:            "teststanzaname",
 		Title:                 "Test Scheme",
 		Description:           "This is the description of the test scheme",
-		UseExternalValidation: false,
-		UseSingleInstance:     false,
+		useExternalValidation: false,
+		useSingleInstance:     false,
 	}
 	st := Stanza{
 		Name: "testscheme://testinputname",

@@ -27,6 +27,7 @@ type Client struct {
 	nameSpace   Namespace
 	httpClient  *http.Client
 	credentials *CredentialsCollection
+	users       *UsersCollection
 	kvstore     *KVStoreCollCollection
 	// context of the current authenticated session. Provides info about the logged-in username, roles, etc
 	authContext *ContextResource
@@ -133,6 +134,13 @@ func (ss *Client) GetCredentials() *CredentialsCollection {
 		ss.credentials = NewCredentialsCollection(ss)
 	}
 	return ss.credentials
+}
+
+func (ss *Client) GetUsers() *UsersCollection {
+	if ss.users == nil {
+		ss.users = NewUsersCollection(ss)
+	}
+	return ss.users
 }
 
 func (ss *Client) GetKVStore() *KVStoreCollCollection {

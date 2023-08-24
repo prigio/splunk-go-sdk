@@ -1,6 +1,7 @@
 package splunkd
 
 import (
+	"os"
 	"testing"
 )
 
@@ -8,15 +9,49 @@ var ss *Client
 var err error
 
 const (
-	testing_endpoint = "https://splunk:3089"
+	testing_endpoint = "https://splunk:5089"
 	testing_user     = "admin"
 	testing_password = "splunked"
-	testing_jwtToken = "eyJraWQiOiJzcGx1bmsuc2VjcmV0IiwiYWxnIjoiSFM1MTIiLCJ2ZXIiOiJ2MiIsInR0eXAiOiJzdGF0aWMifQ.eyJpc3MiOiJhZG1pbiBmcm9tIHNwbHVuay12ZXJ0ZWMiLCJzdWIiOiJhZG1pbiIsImF1ZCI6InRlc3RpbmciLCJpZHAiOiJTcGx1bmsiLCJqdGkiOiI2NmFiNDA1ZDNhYWFlNzQ2ZjgzMmRjZGM5YjYyMDAyYzcyMjcxMTQ1YzgzNmEyMmFiNzVhZGVhMGViMzMxZWZhIiwiaWF0IjoxNjg4MTMwMDE3LCJleHAiOjE2OTA3MjIwMTcsIm5iciI6MTY4ODEzMDAxN30.weVJJmkZGioDUZM0CicAbJ1mO1OZXUPIE8PBwZHmLh5lW0eFUN8mCpkg4BzVvHTJXLBXjRhSyMq_m5obwuKgvg"
+	testing_jwtToken = ""
 	//jwtToken           = "eyJraWQiOiJzcGx1bmsuc2VjcmV0IiwiYWxnIjoiSFM1MTIiLCJ2ZXIiOiJ2MiIsInR0eXAiOiJzdGF0aWMifQ.eyJpc3MiOiJhZG1pbiBmcm9tIHNwbHVuazktZG9ja2VyIiwic3ViIjoiYWRtaW4iLCJhdWQiOiJ0ZXN0IiwiaWRwIjoiU3BsdW5rIiwianRpIjoiYjI2NDQ3NWI4OGEzMDE5YjYwMjA1ODM2MWIyNGQxZGU1YmQ2ZDExM2Q1ZWIwZGIyNzE3MzU4NmJkZjZmNDQyOCIsImlhdCI6MTY4Njg3MjA1MCwiZXhwIjoxNjg5NDY0MDUwLCJuYnIiOjE2ODY4NzIwNTB9.cjUT0lwfOqLlCHlNYUGydoqckSxFZFYZKYZq6jfRx5Rr8Kvzd5PNd7XyY3ocGx2f1YHJOVSmjgMRnn56gESzPA"
 	testing_mfaCode            = ""
 	testing_insecureSkipVerify = true
 	testing_proxy              = "" //"http://localhost:8080"
 )
+
+// TestMain can be used for global initialization and tear-down of the testing environment
+func TestMain(m *testing.M) {
+	// call flag.Parse() here if TestMain uses flags
+
+	/*ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy)
+	if err != nil {
+		fmt.Printf("TestMain: %s", err)
+		os.Exit(1)
+	}
+	if err = ss.Login(testing_user, testing_password, testing_mfaCode); err != nil {
+		fmt.Printf("TestMain: %s", err)
+		os.Exit(1)
+	}
+	*/
+	os.Exit(m.Run())
+}
+
+// mustLoginToSplunk performs a username+password login on splunk and returns a *Client instance to it.
+// If login is not successful, the test t is interrrupted.
+func mustLoginToSplunk(t *testing.T) *Client {
+	t.Log("INFO Connecting to Splunk")
+	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
+		t.Error(err)
+		t.FailNow()
+		return nil
+	}
+	if err = ss.Login(testing_user, testing_password, testing_mfaCode); err != nil {
+		t.Error("Client can not perform login with username and password")
+		t.FailNow()
+		return nil
+	}
+	return ss
+}
 
 func TestLogin(t *testing.T) {
 	wrongUrl := "http://thisdoesnotexist.nonexistingdomain.com"
@@ -67,9 +102,10 @@ func TestLoginToken(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-
-	if err = ss.LoginWithToken(testing_jwtToken); err != nil {
-		t.Error("Login using token did not work")
+	if testing_jwtToken != "" {
+		if err = ss.LoginWithToken(testing_jwtToken); err != nil {
+			t.Error("Login using token did not work")
+		}
 	}
 
 }

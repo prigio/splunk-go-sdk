@@ -36,7 +36,7 @@ func NewCredentialsCollection(ss *Client) *CredentialsCollection {
 
 }
 
-func (col *CredentialsCollection) CreateCred(user, realm, password string) (*collectionEntry[CredentialResource], error) {
+func (col *CredentialsCollection) CreateCred(user, realm, password string) (*entry[CredentialResource], error) {
 	credPostParams := url.Values{}
 	credPostParams.Set("name", user)
 	credPostParams.Set("password", password)
@@ -47,7 +47,7 @@ func (col *CredentialsCollection) CreateCred(user, realm, password string) (*col
 	return col.Create(entryId, &credPostParams)
 }
 
-func (col *CredentialsCollection) GetCred(user, realm string) (*collectionEntry[CredentialResource], error) {
+func (col *CredentialsCollection) GetCred(user, realm string) (*entry[CredentialResource], error) {
 	entryId := urlEncodeCredential(user, realm)
 	return col.Get(entryId)
 }

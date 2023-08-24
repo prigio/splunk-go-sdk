@@ -8,20 +8,26 @@ import (
 	"github.com/prigio/splunk-go-sdk/utils"
 )
 
+// ArgValidation defines an enumeration of the available splunk-provided splunk argument evaluations
+type ArgValidation string
+
 /* This file defines the struct describing a parameter of an alert action */
 
 // ParamType is used to communicate how an alert action parameter should be represented within the UI
 // See: https://dev.splunk.com/enterprise/docs/devtools/customalertactions/createuicaa#Custom-HTML-elements
 type ParamType int
 
+// ParamDataType is used to store the expected type of the parameter's value. Possible values are string, number, bool.
+type ParamDataType int
+
 const (
 	// https://dev.splunk.com/enterprise/docs/devtools/customalertactions/createuicaa#Custom-HTML-elements
-	ParamTypeText           ParamType = 1
-	ParamTypeTextArea       ParamType = 2
-	ParamTypeSearchDropdown ParamType = 3
-	ParamTypeDropdown       ParamType = 4
-	ParamTypeRadio          ParamType = 5
-	ParamTypeColorPicker    ParamType = 6
+	ParamTypeText ParamType = iota + 1
+	ParamTypeTextArea
+	ParamTypeSearchDropdown
+	ParamTypeDropdown
+	ParamTypeRadio
+	ParamTypeColorPicker
 )
 
 // paramOption contains on admissible internal and visible values for a -dropdown or radio- parameter.
@@ -43,22 +49,23 @@ type Param struct {
 	// Name is the internal name of the parameter, the one actually provided within splunk configurations
 	Name        string
 	Description string
-	// UIType encodes how this parameter should be represented in the UI. Use the ParamTypeXXX constants for this.
-	UIType ParamType
-	// DefaultValue is used in case an actual value has not been set by the run-time configurations
-	DefaultValue string
-	// Placeholder is a string used within the UI to provide a sample of the value.
+	dataType    ParamDataType
+	// uiType encodes how this parameter should be represented in the UI. Use the ParamTypeXXX constants for this.
+	uiType ParamType
+	// defaultValue is used in case an actual value has not been set by the run-time configurations
+	defaultValue string
+	// placeholder is a string used within the UI to provide a sample of the value.
 	// It only makes sense for parameters of type Text and TextArea
-	Placeholder string
-	Required    bool
-	// Sensitive expresses whether the parameter can or cannot be logged. If sensitive, then the actual value should be masked upon logging
-	Sensitive bool
-	// ConfigFile is the name of the configuration file where this parameter is located.
+	placeholder string
+	required    bool
+	// sensitive expresses whether the parameter can or cannot be logged. If sensitive, then the actual value should be masked upon logging
+	sensitive bool
+	// configFile is the name of the configuration file where this parameter is located.
 	// This applies only to global parameters, which are not defined within alert_actions.conf
-	ConfigFile string
-	// Stanza is the name of the configuration stanza within ConfigFile file where this parameter is located.
+	configFile string
+	// stanza is the name of the configuration stanza within ConfigFile file where this parameter is located.
 	// This applies only to global parameters, which are not defined within alert_actions.conf
-	Stanza string
+	stanza string
 
 	// availableOptions is a slice of admissible choices for the values of this parameter
 	// intended to be used to represent parameters of type dropdown and radio
@@ -78,7 +85,7 @@ func NewGlobalParam(configFile, stanza, name, title, description, defaultValue s
 
 // NewParam instantiates a parameter, whose value is provided by splunk to the alert action when starting it up
 func NewParam(name, title, description, defaultValue, placeholder string, uiType ParamType, required bool) (*Param, error) {
-	return newParameter("", "", name, title, description, defaultValue, placeholder, uiType, required)
+	return newParameter("alert_actions.conf", "", name, title, description, defaultValue, placeholder, uiType, required)
 }
 
 // newParameter is an internal utility function to actually instantiate a new Parameter
@@ -89,36 +96,35 @@ func newParameter(configFile, stanza, name, title, description, defaultValue, pl
 	if title == "" {
 		return nil, utils.NewErrInvalidParam("newParam", nil, "'title' cannot be empty for '%s'", name)
 	}
-	if configFile != "" || stanza != "" {
-		if configFile == "" {
-			return nil, utils.NewErrInvalidParam("newParam", nil, "'configFile' cannot be empty for '%s'", name)
-		}
-		if stanza == "" {
-			return nil, utils.NewErrInvalidParam("newParam", nil, "'stanza' cannot be empty for '%s'", name)
-		}
-		configFile = strings.TrimSuffix(configFile, ".conf")
+	if configFile == "" {
+		return nil, utils.NewErrInvalidParam("newParam", nil, "'configFile' cannot be empty for '%s'", name)
+	}
+	if stanza == "" {
+		return nil, utils.NewErrInvalidParam("newParam", nil, "'stanza' cannot be empty for '%s'", name)
 	}
 
 	if !(uiType == 0 || uiType == ParamTypeText || uiType == ParamTypeTextArea || uiType == ParamTypeSearchDropdown || uiType == ParamTypeRadio || uiType == ParamTypeDropdown || uiType == ParamTypeColorPicker) {
 		return nil, utils.NewErrInvalidParam("newParam", nil, "'uiType' should either be 0 or one of the allowed ParamTypes")
 	}
 
+	configFile = strings.TrimSuffix(configFile, ".conf")
+
 	param := &Param{
-		ConfigFile:   configFile,
-		Stanza:       stanza,
 		Title:        title,
 		Name:         name,
-		UIType:       uiType,
 		Description:  description,
-		Placeholder:  placeholder,
-		DefaultValue: defaultValue,
-		Required:     required,
+		configFile:   configFile,
+		stanza:       stanza,
+		uiType:       uiType,
+		placeholder:  placeholder,
+		defaultValue: defaultValue,
+		required:     required,
 	}
 	return param, nil
 }
 
-// AddChoice adds another valid choice to the set of acceptable ones. This is useful for Dropdown/Radio parameters,
-// where the user is expected to pick a value out of a list.
+// AddChoice adds another valid choice to the set of acceptable ones.
+// This is useful for AlertAction Dropdown/Radio parameters, where the user is expected to pick a value out of a list.
 // The "value" is the actual value which would be found within splunk configurations. It empty, the function returns an error.
 // The "visibleValue" is what Splunk UI should show the user in the alert configuration panel. If empty, it will get the value of "value".
 // The function returns an error if multiple choices having the same "value" have been registered.
@@ -172,7 +178,7 @@ func (p *Param) GetValue() string {
 	if p.actualValueIsSet {
 		return os.ExpandEnv(p.actualValue)
 	}
-	return os.ExpandEnv(p.DefaultValue)
+	return os.ExpandEnv(p.defaultValue)
 }
 
 // GetChoices returns a list of the internal values of the acceptable options for the parameter.
@@ -183,4 +189,15 @@ func (p *Param) GetChoices() []string {
 		l[i] = c.Value
 	}
 	return l
+}
+
+// SetSensitive configures the parameter to contain sensitive data.
+// The parameter value will be masked when being logged or printed-out.
+func (p *Param) SetSensitive() {
+	p.sensitive = true
+}
+
+// GetConfigDefinition returns a triple (configFile, stanza, param name) defining where this parameter has been defined.
+func (p *Param) GetConfigDefinition() (configFile, stanza, paramName string) {
+	return p.configFile, p.stanza, p.Name
 }

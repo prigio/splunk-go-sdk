@@ -61,6 +61,48 @@ func (s *Stanza) Param(name string) string {
 	return ""
 }
 
+// ParamAsCSVList scans the stanza s parameters to find the param with the specified name; it then:
+// - splits its value on commas ','
+// - trims emtpy spaces from the resulting values
+// - returns a slice of said values
+// If the parameter was not found, or it was found and is empty: nil is returned
+func (s *Stanza) ParamAsCSVList(name string) []string {
+	for _, p := range s.Params {
+		if strings.ToLower(p.Name) == name {
+			if p.Value == "" {
+				return nil
+			}
+			var ret = make([]string, 0, 10)
+			for _, v := range strings.Split(p.Value, ",") {
+				ret = append(ret, strings.Trim(v, " "))
+			}
+			return ret
+		}
+	}
+	return nil
+}
+
+// ParamAsList scans the stanza s parameters to find the param with the specified name; it then:
+// - splits its value occurrences of the 'sep' parameter
+// - trims emtpy spaces from the resulting values
+// - returns a slice of said values
+// If the parameter was not found, or it was found and is empty: nil is returned
+func (s *Stanza) ParamAsList(name string, sep string) []string {
+	for _, p := range s.Params {
+		if strings.ToLower(p.Name) == name {
+			if p.Value == "" {
+				return nil
+			}
+			var ret = make([]string, 0, 10)
+			for _, v := range strings.Split(p.Value, sep) {
+				ret = append(ret, strings.Trim(v, " "))
+			}
+			return ret
+		}
+	}
+	return nil
+}
+
 // ParamList scans the ValidationItem vi "list" parameters and returns the values of the param_list with the specified name.
 // If not found, returns an empty list of strings
 func (vi *Stanza) ParamList(name string) []string {

@@ -4,66 +4,21 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/prigio/splunk-go-sdk/utils"
 )
 
-// collectionEntry represents one entry returned by a collection after invoking the API
-type collectionEntry[T any] struct {
-	Name   string `json:"name"`
-	Id     string `json:"id"`
-	Author string `json:"author"`
-	Links  struct {
-		// more info on the provided links under:
-		//    https://docs.splunk.com/Documentation/Splunk/9.0.5/RESTUM/RESTusing#Atom_Feed_response
-		List   string `json:"list"`
-		Remove string `json:"remove"`
-	} `json:"links"`
-	ACL     AccessControlList `json:"acl"`
-	Content T                 `json:"content"`
-}
-
-func (ce *collectionEntry[T]) Delete(ss *Client) error {
-	if ce.Links.Remove == "" {
-		return fmt.Errorf("%T delete: '%s' cannot be deleted", ce, ce.Name)
-	}
-	if err := doSplunkdHttpRequest(ss, "DELETE", ce.Links.Remove, nil, nil, "", &discardBody{}); err != nil {
-		return fmt.Errorf("%T delete: '%s' cannot be deleted: %w", ce, ce.Name, err)
-	}
-	return nil
-}
-
-func (ce *collectionEntry[T]) setSharing(ss *Client, sharing SplunkSharing) error {
-	fullUrl, _ := url.JoinPath(ce.Id, "acl")
-	ce.ACL.Sharing = string(sharing)
-	tmp := collectionEntry[T]{}
-	if err := doSplunkdHttpRequest(ss, "POST", fullUrl, ce.ACL.ToURL(), nil, "", &tmp); err != nil {
-		return fmt.Errorf("setSharing: cannot share '%s' to '%s'. %w", ce.Name, sharing, err)
-	}
-	ce.ACL = tmp.ACL
-	return nil
-}
-
-func (ce *collectionEntry[T]) SetSharingGlobal(ss *Client) error {
-	if ce.ACL.Sharing == string(SplunkSharingGlobal) {
-		return nil
-	}
-	return ce.setSharing(ss, SplunkSharingGlobal)
-}
-
-func getUrl(collectionPath, entry string) string {
-	var fullUrl string
-
-	if strings.HasPrefix(collectionPath, "/services") {
-		fullUrl, _ = url.JoinPath(collectionPath, entry)
-	} else {
-		fullUrl, _ = url.JoinPath("/services", collectionPath, entry)
-	}
-	return fullUrl
-}
-
 // collection represents a collection of entries regarding an API endpoint
 type collection[T any] struct {
+	// name is the internal name used to refer to this collection[T]. Mostly used for error management purposes
+	name string
+	// path represents the part of URL after services/ or servicesNS/user/app/ to access the resources of the collection
+	path    string
+	splunkd *Client
+	mu      sync.RWMutex
+	// Following fields are used to populate collection data from the API
+
 	Origin  string `json:"origin"`
 	Link    string `json:"link"`
 	Updated string `json:"updated"`
@@ -71,15 +26,8 @@ type collection[T any] struct {
 		Total   int `json:"total"`
 		PerPage int `json:"perPage"`
 		Offset  int `json:"offset"`
-	}
-	// name is the internal name used to refer to this collection[T]. Mostly used for error management purposes
-	name string
-	// path represents the part of URL after services/ or servicesNS/user/app/ to access the resources of the collection
-	path string
-
-	Entries []collectionEntry[T] `json:"entry"`
-
-	splunkd *Client
+	} `json:"paging"`
+	Entries []entry[T] `json:"entry"`
 }
 
 func (col *collection[T]) isInitialized() error {
@@ -89,32 +37,7 @@ func (col *collection[T]) isInitialized() error {
 	return nil
 }
 
-func (col *collection[T]) List() ([]collectionEntry[T], error) {
-	if err := col.isInitialized(); err != nil {
-		return nil, fmt.Errorf("list: %w", err)
-	}
-	fullUrl := getUrl(col.path, "")
-
-	if err := doSplunkdHttpRequest(col.splunkd, "GET", fullUrl, nil, nil, "", &col); err != nil {
-		return nil, fmt.Errorf("%s list: %w", col.name, err)
-	}
-	return col.Entries, nil
-}
-
-func (col *collection[T]) Get(entryName string) (*collectionEntry[T], error) {
-	if err := col.isInitialized(); err != nil {
-		return nil, fmt.Errorf("get: %w", err)
-	}
-
-	fullUrl := getUrl(col.path, entryName)
-	tmpCol := collection[T]{}
-	if err := doSplunkdHttpRequest(col.splunkd, "GET", fullUrl, nil, nil, "", &tmpCol); err != nil {
-		return nil, fmt.Errorf("%s get: %w", col.name, err)
-	}
-	return &tmpCol.Entries[0], nil
-}
-
-func (col *collection[T]) Create(entryName string, params *url.Values) (*collectionEntry[T], error) {
+func (col *collection[T]) Create(entryName string, params *url.Values) (*entry[T], error) {
 	if err := col.isInitialized(); err != nil {
 		return nil, fmt.Errorf("create: %w", err)
 	}
@@ -136,7 +59,77 @@ func (col *collection[T]) Create(entryName string, params *url.Values) (*collect
 	return &tmpCol.Entries[0], nil
 }
 
-func (col *collection[T]) CreateNS(ns *Namespace, entryName string, params *url.Values) (*collectionEntry[T], error) {
+// List provides a list of all entres of the collection
+func (col *collection[T]) List() ([]entry[T], error) {
+	return col.list(url.Values{})
+}
+
+// Search provides a list of all entres of the collection filtered by 'filter'.
+// 'filter' can be just a value, or a fieldname=value tuple
+func (col *collection[T]) Search(filter string) ([]entry[T], error) {
+	/// https://docs.splunk.com/Documentation/Splunk/9.1.0/RESTREF/RESTprolog#Pagination_and_filtering_parameters
+	searchParams := url.Values{}
+	searchParams.Set("search", filter)
+	return col.list(searchParams)
+}
+
+func (col *collection[T]) list(searchParams url.Values) ([]entry[T], error) {
+	col.mu.Lock()
+	defer col.mu.Unlock()
+
+	if err := col.isInitialized(); err != nil {
+		return nil, fmt.Errorf("list: %w", err)
+	}
+	fullUrl := getUrl(col.path, "")
+
+	tmpCol := collection[T]{name: col.name, path: col.path}
+
+	// https://docs.splunk.com/Documentation/Splunk/9.1.0/RESTREF/RESTprolog#Pagination_and_filtering_parameters
+	searchParams.Set("count", "50")
+	searchParams.Set("offset", "0")
+	firstRound := true
+	for firstRound || tmpCol.Paging.Offset+len(tmpCol.Entries) < tmpCol.Paging.Total {
+		firstRound = false
+		if err := doSplunkdHttpRequest(col.splunkd, "GET", fullUrl, &searchParams, nil, "", &tmpCol); err != nil {
+			return nil, fmt.Errorf("%s list: %w", col.name, err)
+		}
+		if col.Entries == nil {
+			col.Entries = make([]entry[T], 0, tmpCol.Paging.Total)
+		}
+		col.Entries = append(col.Entries, tmpCol.Entries...)
+		searchParams.Set("offset", fmt.Sprint(tmpCol.Paging.Offset+len(tmpCol.Entries)))
+	}
+	col.Link = tmpCol.Link
+	col.Origin = tmpCol.Updated
+	col.Paging = tmpCol.Paging
+	return col.Entries, nil
+}
+
+func (col *collection[T]) Exists(entryName string) bool {
+	if err := col.isInitialized(); err != nil {
+		return false
+	}
+	fullUrl := getUrl(col.path, entryName)
+	if err := doSplunkdHttpRequest(col.splunkd, "GET", fullUrl, nil, nil, "", &discardBody{}); err != nil {
+		return false
+	}
+	return true
+}
+
+func (col *collection[T]) Get(entryName string) (*entry[T], error) {
+	if err := col.isInitialized(); err != nil {
+		return nil, fmt.Errorf("get: %w", err)
+	}
+
+	fullUrl := getUrl(col.path, entryName)
+	tmpCol := collection[T]{}
+	if err := doSplunkdHttpRequest(col.splunkd, "GET", fullUrl, nil, nil, "", &tmpCol); err != nil {
+		return nil, fmt.Errorf("%s get: %w", col.name, err)
+	}
+	return &tmpCol.Entries[0], nil
+}
+
+func (col *collection[T]) CreateNS(ns *Namespace, entryName string, params *url.Values) (*entry[T], error) {
 	if err := col.isInitialized(); err != nil {
 		return nil, fmt.Errorf("createNS: %w", err)
 	}
@@ -203,6 +196,16 @@ func (col *collection[T]) Delete(entryName string) error {
 	return nil
 }
 
+func (col *collection[T]) DeleteEntry(e *entry[T]) error {
+	if e.Links.Remove == "" {
+		return fmt.Errorf("%T DeleteEntry: '%s' cannot be deleted", e, e.Name)
+	}
+	if err := doSplunkdHttpRequest(col.splunkd, "DELETE", e.Links.Remove, nil, nil, "", &discardBody{}); err != nil {
+		return fmt.Errorf("%T DeleteEntry: '%s' cannot be deleted: %w", e, e.Name, err)
+	}
+	return nil
+}
+
 // https://docs.splunk.com/Documentation/Splunk/9.0.5/RESTUM/RESTusing#Access_Control_List
 func (col *collection[T]) UpdateACL(entryName string, acl AccessControlList) error {
 	if err := col.isInitialized(); err != nil {
@@ -263,4 +266,15 @@ func (col *collection[T]) UpdateACL(entryName string, acl AccessControlList) err
 		return fmt.Errorf("%s updateACL: %w", col.name, err)
 	}
 	return nil
+}
+
+func getUrl(collectionPath, entry string) string {
+	var fullUrl string
+
+	if strings.HasPrefix(collectionPath, "/services") {
+		fullUrl, _ = url.JoinPath(collectionPath, entry)
+	} else {
+		fullUrl, _ = url.JoinPath("/services", collectionPath, entry)
+	}
+	return fullUrl
 }

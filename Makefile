@@ -10,27 +10,23 @@ default: check
 # the following builds and tests the libraries
 check: build-modinputs test-modinputs build-client test-client
 
-build-client:
+splunkd: splunk-test-start
 	@echo ""
-	@echo "Starting 'go build' for the client package"
+	@echo "Starting 'go build + test' for the splunkd package"
 	@echo "This will throw errors if go cannot build the library."
 	@echo "Note: output of a built library gets discarded by go, as there is no executable in it"
 	@echo ""
-	docker run --rm -v $(PWD):/src/ --workdir /src/client ${GOCONTAINERIMAGE} go build
+	docker run --rm -v $(PWD):/src/ --workdir /src/splunkd ${GOCONTAINERIMAGE} go test
+	docker run --rm -v $(PWD):/src/ --workdir /src/splunkd ${GOCONTAINERIMAGE} go build
 
-test-client:
-	@echo ""
-	@echo "Starting 'go test' for the client package"
-	@echo ""
-	docker run --rm -v $(PWD):/src/ --workdir /src/client ${GOCONTAINERIMAGE} go test
-
-build-modinputs:
+build-modinputs: splunk-test-start
 	@echo ""
 	@echo "Starting 'go build' for the modinputs package"
 	@echo "This will throw errors if go cannot build the library."
 	@echo "Note: output of a built library gets discarded by go, as there is no executable in it"
 	@echo ""
 	docker run --rm -v $(PWD):/src/ --workdir /src/modinputs ${GOCONTAINERIMAGE} go build
+	docker run --rm -v $(PWD):/src/ --workdir /src/modinputs ${GOCONTAINERIMAGE} go test
 
 test-modinputs:
 	@echo ""
@@ -49,3 +45,9 @@ build-hello:
 run-hello:
 	@echo "Starting container with built "hello" modular input. Paste a XML configuration and hit Ctrl-D to start the input processing."
 	docker run --rm -ti modinputs-hello
+
+splunk-test-start:
+	docker compose up -d
+
+splunk-test-stop:
+	docker compose down

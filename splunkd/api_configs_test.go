@@ -10,15 +10,7 @@ import (
 func TestConfigsSourcetypes(t *testing.T) {
 	newSourcetype := uuid.New().String()[0:8] + "-sourcetype"
 
-	t.Log("INFO Connecting to Splunk")
-	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	if err = ss.Login(testing_user, testing_password, testing_mfaCode); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+	ss := mustLoginToSplunk(t)
 
 	propsCol := NewConfigsCollection(ss, "props")
 
@@ -192,44 +184,48 @@ func TestConfigResourceGetFloat(t *testing.T) {
 }
 
 func TestConfigsNS(t *testing.T) {
-	newSourcetype := uuid.New().String()[0:8] + "-sourcetype"
+	ss := mustLoginToSplunk(t)
+	sourceType := "sourcetype-" + uuid.New().String()[0:5]
+	accountUser := "user"
+	accountTest := "test"
 
-	t.Log("INFO Connecting to Splunk")
-	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
-		t.Error(err)
-		t.FailNow()
+	// create testing users if necessary
+	for _, u := range []string{accountUser, accountTest} {
+		if !ss.GetUsers().Exists(u) {
+			t.Logf("INFO Creating necessary user='%s'", u)
+			_, err := ss.GetUsers().CreateUser(u, UserResource{Password: uuid.New().String()[0:16], Roles: []string{"power"}})
+			if err != nil {
+				t.Errorf(err.Error())
+				t.FailNow()
+			}
+		}
 	}
-	if err = ss.Login(testing_user, testing_password, testing_mfaCode); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	propsCol := NewConfigsCollectionNS(ss, "props", "user", "search")
 
-	//nsTestSearch, _ := NewNamespace("test", "search", SplunkSharingApp)
-	nsTestLauncher, _ := NewNamespace("test", "launcher", SplunkSharingApp)
+	propsColNS := NewConfigsCollectionNS(ss, "props", accountUser, "search")
 
-	t.Logf("TestConfigNS: Working with sourcetype %s", newSourcetype)
+	nsTestLauncher, _ := NewNamespace(accountTest, "launcher", SplunkSharingApp)
+	t.Logf("TestConfigNS: Working with sourcetype %s", sourceType)
 
 	params := url.Values{}
-	params.Set("REPORT-fields", "testSearchFields")
-	ce, err := propsCol.CreateStanza(newSourcetype, &params)
+	params.Set("REPORT-fields", "someConfigFor-"+accountUser)
+	ce, err := propsColNS.CreateStanza(sourceType, &params)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
 
 	ce.ACL.Sharing = string(SplunkSharingApp)
-	if err := propsCol.UpdateACL(ce.Name, ce.ACL); err != nil {
+	if err := propsColNS.UpdateACL(ce.Name, ce.ACL); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
-	checkCE, _ := propsCol.Get(newSourcetype)
+	checkCE, _ := propsColNS.Get(sourceType)
 	if checkCE.ACL.Sharing != ce.ACL.Sharing {
-		t.Errorf("TestConfigsNS: sharing for resource '%s/%s' is '%s', expected '%s'", "props", newSourcetype, checkCE.ACL.Sharing, ce.ACL.Sharing)
+		t.Errorf("TestConfigsNS: sharing for resource '%s/%s' is '%s', expected '%s'", "props", sourceType, checkCE.ACL.Sharing, ce.ACL.Sharing)
 	}
 
 	params.Set("REPORT-fields", "testSearchLauncher")
-	_, err = propsCol.CreateNS(nsTestLauncher, newSourcetype, &params)
+	_, err = propsColNS.CreateNS(nsTestLauncher, sourceType, &params)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -241,15 +237,7 @@ func TestConfigsNS(t *testing.T) {
 func TestConfigCustom(t *testing.T) {
 	newConfig := uuid.New().String()[0:8] + "-paolo"
 
-	t.Log("INFO Connecting to Splunk")
-	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	if err = ss.Login(testing_user, testing_password, testing_mfaCode); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+	ss := mustLoginToSplunk(t)
 
 	customConfCol := NewConfigsCollection(ss, "paolo")
 

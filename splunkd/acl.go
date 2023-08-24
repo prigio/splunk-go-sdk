@@ -9,13 +9,21 @@ import (
 // See: https://docs.splunk.com/Documentation/Splunk/9.0.5/RESTUM/RESTusing#Access_Control_List
 
 type AccessControlList struct {
-	App     string `json:"app"`
-	Owner   string `json:"owner"`
-	Sharing string `json:"sharing"`
+	App     string `json:"app" url:"app"`
+	Owner   string `json:"owner" url:"owner"`
+	Sharing string `json:"sharing" url:"sharing"`
 	Perms   struct {
-		Read  []string `json:"read"`
-		Write []string `json:"write"`
+		Read  []string `json:"read" url:"perms.read"`
+		Write []string `json:"write" url:"perms.write"`
 	}
+	// CanWrite Indicates whether or not the current user can edit this item
+	CanWrite bool `json:"can_write" url:"-"`
+	// CanShareGlobal indicates whether or not the current user can change the sharing state to Global
+	CanShareGlobal bool `json:"can_share_global" url:"-"`
+	// CanShareApp indicates whether or not the current user can change the sharing state to App
+	CanShareApp bool `json:"can_share_app" url:"-"`
+	// CanShareUser indicates whether or not the current user can change the sharing state to User
+	CanShareUser bool `json:"can_share_user" url:"-"`
 }
 
 // ServicesNSPath returns the user/app path which needs be added after ../servcesNS/ in an API call to splunkd

@@ -7,15 +7,7 @@ import (
 )
 
 func TestCredentialNoRealm(t *testing.T) {
-	t.Log("INFO Connecting to Splunk")
-	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	if err = ss.Login(testing_user, testing_password, testing_mfaCode); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+	ss := mustLoginToSplunk(t)
 
 	credentials := ss.GetCredentials()
 	credNoRealm := uuid.New().String()[0:8] + "-no-realm"
@@ -69,15 +61,7 @@ func TestCredentialNoRealm(t *testing.T) {
 }
 
 func TestCredentialWithRealm(t *testing.T) {
-	t.Log("INFO Connecting to Splunk")
-	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	if err = ss.Login(testing_user, testing_password, testing_mfaCode); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+	ss := mustLoginToSplunk(t)
 
 	credentials := ss.GetCredentials()
 	credWithRealm := uuid.New().String()[0:8] + "-with-realm"
@@ -132,20 +116,23 @@ func TestCredentialWithRealm(t *testing.T) {
 }
 
 func TestCredentialACL(t *testing.T) {
-	t.Log("INFO Connecting to Splunk")
-	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	if err = ss.Login(testing_user, testing_password, testing_mfaCode); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+	ss := mustLoginToSplunk(t)
 
 	credentials := ss.GetCredentials()
 	credWithRealm := uuid.New().String()[0:8] + "-with-realm"
 	credRealm := "testRealm"
 	credPassword := "this is a password"
+	test_user := "test"
+
+	// create a necessary additional testing user
+	if !ss.GetUsers().Exists(test_user) {
+		t.Logf("INFO Creating necessary user='%s'", test_user)
+		_, err := ss.GetUsers().CreateUser(test_user, UserResource{Password: uuid.New().String()[0:16], Roles: []string{"power"}})
+		if err != nil {
+			t.Errorf(err.Error())
+			t.FailNow()
+		}
+	}
 
 	t.Logf("INFO Creating credential realm='%s' user='%s'", credRealm, credWithRealm)
 	cr, err := credentials.CreateCred(credWithRealm, credRealm, credPassword)

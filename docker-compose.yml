@@ -1,0 +1,14 @@
+services:
+  splunk-go-sdk-test:
+    image: splunk/splunk:9.0.4
+    build: .
+    cpu_count : 1
+    ports:
+      - "5000:8000"
+      - "5089:8089"
+      - "5088:8088"
+    environment:
+      SPLUNK_START_ARGS: --accept-license
+      SPLUNK_PASSWORD: splunked
+    volumes:
+      - .:/code

@@ -109,7 +109,7 @@ func NewConfigsCollectionNS(ss *Client, configFileName, owner, app string) *Conf
 	return col
 }
 
-func (col *ConfigsCollection) CreateStanza(name string, params *url.Values) (*collectionEntry[ConfigResource], error) {
+func (col *ConfigsCollection) CreateStanza(name string, params *url.Values) (*entry[ConfigResource], error) {
 	if params == nil || len(*params) == 0 {
 		return nil, fmt.Errorf("%s createConfig: params cannot be empty", col.name)
 	}

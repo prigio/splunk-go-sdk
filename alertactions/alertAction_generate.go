@@ -49,7 +49,7 @@ action.%s = [0|1]
 `, aa.Label, aa.StanzaName)
 
 	for _, par := range aa.params {
-		fmt.Fprint(buf, par.getSavedSearchesSpec(aa.StanzaName))
+		fmt.Fprint(buf, par.GenerateSpec(fmt.Sprintf("action.%s.param", aa.StanzaName)))
 	}
 	return buf.String()
 }
@@ -95,7 +95,7 @@ func (aa *AlertAction) generateAlertActionsSpec() string {
 `, aa.Label, aa.StanzaName)
 
 	for _, par := range aa.params {
-		fmt.Fprintln(buf, par.getAlertActionsSpec())
+		fmt.Fprintln(buf, par.GenerateSpec("param."))
 	}
 	return buf.String()
 }
@@ -169,7 +169,7 @@ maxtime = 1h
 `, aa.Label, aa.StanzaName, aa.Label, aa.Description, aa.IconPath, os.Args[0])
 
 	for _, par := range aa.params {
-		fmt.Fprintln(buf, par.getAlertActionsConf())
+		fmt.Fprintln(buf, par.GenerateConf("param."))
 	}
 
 	return buf.String()
@@ -187,7 +187,7 @@ func (aa *AlertAction) generateRestMapConf() string {
 [validation:savedsearch]
 `, aa.StanzaName)
 	for _, par := range aa.params {
-		fmt.Fprintln(buf, par.getRestMapConf(aa.StanzaName))
+		fmt.Fprintln(buf, par.GenerateRestMapConf(aa.StanzaName))
 	}
 	return buf.String()
 }
@@ -214,7 +214,7 @@ The following describes the parameters whicn an end user can setup using the ale
 
 `)
 	for _, par := range aa.params {
-		fmt.Fprintln(buf, par.getDocumentation())
+		fmt.Fprintln(buf, par.GenerateDocumentation())
 	}
 
 	fmt.Fprintf(buf, `
@@ -226,7 +226,7 @@ They are set in a custom configuration file and stanza, as described in the foll
 
 `)
 	for _, par := range aa.globalParams {
-		fmt.Fprintln(buf, par.getDocumentation())
+		fmt.Fprintln(buf, par.GenerateDocumentation())
 	}
 
 	fmt.Fprintf(buf, `
@@ -317,7 +317,7 @@ func (aa *AlertAction) getAlertConfigInteractive() (*alertConfig, error) {
 		resp := utils.AskForInput("Do you want to specify global parameters manually (y), or get their value from splunk (n)", "n", false)
 		if strings.ToLower(resp) == "y" {
 			for _, p := range aa.globalParams {
-				pVal := utils.AskForInput(p.Title, p.DefaultValue, p.Sensitive)
+				pVal := utils.AskForInput(p.Title, p.defaultValue, p.sensitive)
 				p.setValue(pVal)
 			}
 		}
@@ -326,7 +326,7 @@ func (aa *AlertAction) getAlertConfigInteractive() (*alertConfig, error) {
 	fmt.Println("Interactively provide values for alert action parameters.")
 	ic.Configuration = make(map[string]string)
 	for _, p := range aa.params {
-		ic.Configuration[p.Name] = utils.AskForInput(p.Title, p.DefaultValue, false)
+		ic.Configuration[p.Name] = utils.AskForInput(p.Title, p.defaultValue, false)
 	}
 
 	return ic, nil
@@ -336,18 +336,18 @@ func (aa *AlertAction) generateAdHocConfigSpecs() string {
 	var paramsByFileAndStanza map[string]map[string][]string = make(map[string]map[string][]string)
 
 	for _, p := range aa.globalParams {
-		confFile := p.ConfigFile
+		confFile, stanza, _ := p.GetConfigDefinition()
 		if !strings.HasSuffix(confFile, ".conf") {
 			confFile = confFile + ".conf"
 		}
 		if _, found := paramsByFileAndStanza[confFile]; !found {
 			paramsByFileAndStanza[confFile] = make(map[string][]string)
-			paramsByFileAndStanza[confFile][p.Stanza] = make([]string, 0)
+			paramsByFileAndStanza[confFile][stanza] = make([]string, 0)
 		}
-		if _, found := paramsByFileAndStanza[confFile][p.Stanza]; !found {
-			paramsByFileAndStanza[confFile][p.Stanza] = make([]string, 0)
+		if _, found := paramsByFileAndStanza[confFile][stanza]; !found {
+			paramsByFileAndStanza[confFile][stanza] = make([]string, 0)
 		}
-		paramsByFileAndStanza[confFile][p.Stanza] = append(paramsByFileAndStanza[confFile][p.Stanza], p.getCustomSpec())
+		paramsByFileAndStanza[confFile][stanza] = append(paramsByFileAndStanza[confFile][stanza], p.GenerateSpec(""))
 	}
 
 	buf := new(strings.Builder)
@@ -379,18 +379,18 @@ func (aa *AlertAction) generateAdHocConfigConfs() string {
 	var paramsByFileAndStanza map[string]map[string][]string = make(map[string]map[string][]string)
 
 	for _, p := range aa.globalParams {
-		confFile := p.ConfigFile
+		confFile := p.configFile
 		if !strings.HasSuffix(confFile, ".conf") {
 			confFile = confFile + ".conf"
 		}
 		if _, found := paramsByFileAndStanza[confFile]; !found {
 			paramsByFileAndStanza[confFile] = make(map[string][]string)
-			paramsByFileAndStanza[confFile][p.Stanza] = make([]string, 0)
+			paramsByFileAndStanza[confFile][p.stanza] = make([]string, 0)
 		}
-		if _, found := paramsByFileAndStanza[confFile][p.Stanza]; !found {
-			paramsByFileAndStanza[confFile][p.Stanza] = make([]string, 0)
+		if _, found := paramsByFileAndStanza[confFile][p.stanza]; !found {
+			paramsByFileAndStanza[confFile][p.stanza] = make([]string, 0)
 		}
-		paramsByFileAndStanza[confFile][p.Stanza] = append(paramsByFileAndStanza[confFile][p.Stanza], p.getCustomConf())
+		paramsByFileAndStanza[confFile][p.stanza] = append(paramsByFileAndStanza[confFile][p.stanza], p.GenerateConf(""))
 	}
 
 	buf := new(strings.Builder)

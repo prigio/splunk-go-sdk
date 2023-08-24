@@ -9,16 +9,29 @@ import (
 The following functions are used by the corresponding AlertAction functions in order to piece together all information for the relevant files.
 */
 
-// getAlertActionsSpec returns a string which can be used to describe the parameter within splunk's README/alert_actions.conf.spec file
-func (p *Param) getAlertActionsSpec() string {
+// GenerateSpec returns a string which can be used to describe the parameter within the specification of a splunk configuration file
+// Parameter 'namePrefix' is prefixed to the name of the parameter.
+// This is needed as some configuration files track custom parameters as "param.XXX" or in other ways.
+// E.g.
+//
+//	param name is "debug"
+//	namePrefix is "config."
+//	the resulting line within the .conf file will be:
+//	    config.debug = ...
+func (p *Param) GenerateSpec(namePrefix string) string {
 	buf := new(strings.Builder)
 	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
 	buf.Grow(512)
 
-	fmt.Fprintf(buf, `param.%s = <string>
+	if namePrefix != "" {
+		namePrefix = strings.TrimRight(namePrefix, ".")
+		fmt.Fprintf(buf, "%s.", namePrefix)
+	}
+	fmt.Fprintf(buf, `%s = <string>
 *  %s: %s
+*  Required: %v
 *  Default value: "%s"
-`, p.Name, p.Title, strings.ReplaceAll(p.Description, "\n", " "), strings.ReplaceAll(p.DefaultValue, "\n", " "))
+`, p.Name, p.Title, strings.ReplaceAll(p.Description, "\n", " "), p.required, strings.ReplaceAll(p.defaultValue, "\n", " "))
 
 	if len(p.availableOptions) > 0 {
 		fmt.Fprintf(buf, "* Available choices: %s", strings.Join(p.GetChoices(), "; "))
@@ -26,8 +39,16 @@ func (p *Param) getAlertActionsSpec() string {
 	return buf.String()
 }
 
-// getAlertActionsConf returns a string which can be used to describe the parameter within splunk's default/alert_actions.conf file
-func (p *Param) getAlertActionsConf() string {
+// GenerateConf returns a string which can be used to describe the parameter within a splunk configuration file
+// Parameter 'namePrefix' is prefixed to the name of the parameter.
+// This is needed as some configuration files track custom parameters as "param.XXX" or in other ways.
+// E.g.
+//
+//	param name is "debug"
+//	namePrefix is "config."
+//	the resulting line within the .conf file will be:
+//	    config.debug = ...
+func (p *Param) GenerateConf(namePrefix string) string {
 	buf := new(strings.Builder)
 	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
 	buf.Grow(512)
@@ -37,41 +58,46 @@ func (p *Param) getAlertActionsConf() string {
 		fmt.Fprintf(buf, "# Available choices: %s\n", strings.Join(p.GetChoices(), "; "))
 	}
 
-	fmt.Fprintf(buf, "param.%s = %s\n", p.Name, strings.ReplaceAll(p.DefaultValue, "\n", "\\\n"))
+	if namePrefix == "" {
+		fmt.Fprintf(buf, "%s = %s\n", p.Name, strings.ReplaceAll(p.defaultValue, "\n", "\\\n"))
+	} else {
+		fmt.Fprintf(buf, "%s%s = %s\n", namePrefix, p.Name, strings.ReplaceAll(p.defaultValue, "\n", "\\\n"))
+	}
 
 	return buf.String()
 }
 
-// getSavedSearchesSpec returns a string which can be used to describe the parameter within splunk's README/savedsearches.conf.spec file
-func (p *Param) getSavedSearchesSpec(stanzaName string) string {
-	specVal := "<string>"
-	if len(p.availableOptions) > 0 {
-		specVal = fmt.Sprintf("[%s]", strings.Join(p.GetChoices(), "|"))
+// GenerateRestMapConf returns a string which can be used to describe the parameter within splunk's default/restmap.conf file
+func (p *Param) GenerateRestMapConf(stanzaName string) string {
+	// this only is only needed for NON global parameters
+	// global parameters get an empty string
+	if p.configFile != "" && p.stanza != "" {
+		return ""
 	}
-	return fmt.Sprintf("action.%s.param.%s = %s\n", stanzaName, p.Name, specVal)
-}
-
-// getRestMapConf returns a string which can be used to describe the parameter within splunk's default/restmap.conf file
-func (p *Param) getRestMapConf(stanzaName string) string {
 	return fmt.Sprintf("#action.%s.param.%s = validate( match('action.%s.param.%s', \"^SOME REGULAR EXPRESSION HERE$\"), \"Setting '%s' is invalid, ADD SOME CUSTOM MESSAGE HERE\")\n", stanzaName, p.Name, stanzaName, p.Name, p.Title)
 }
 
 // getUIXML returns a string which can be used to build a HTML UI for the parameter
 // https://dev.splunk.com/enterprise/docs/devtools/customalertactions/createuicaa#Custom-HTML-component-reference
 func (p *Param) getUIHTML(stanzaName string) string {
+	// this only is only needed for NON global parameters
+	// global parameters get an empty string
+	if p.configFile != "" && p.stanza != "" {
+		return ""
+	}
 	buf := new(strings.Builder)
 	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
 	buf.Grow(512)
 
 	fmt.Fprintf(buf, "<splunk-control-group label=\"%s\" help=\"%s\">\n", p.Title, strings.ReplaceAll(p.Description, "\n", " "))
-	if p.Required {
+	if p.required {
 		fmt.Fprintln(buf, "<span style=\"color:red;margin: 0 2px 0 -5px;\">*</span>")
 	}
-	switch p.UIType {
+	switch p.uiType {
 	case ParamTypeText:
-		fmt.Fprintf(buf, "  <splunk-text-input name=\"action.%s.param.%s\" placeholder=\"%s\" id=\"%s\"></splunk-text-input>\n", stanzaName, p.Name, p.Placeholder, p.Name)
+		fmt.Fprintf(buf, "  <splunk-text-input name=\"action.%s.param.%s\" placeholder=\"%s\" id=\"%s\"></splunk-text-input>\n", stanzaName, p.Name, p.placeholder, p.Name)
 	case ParamTypeTextArea:
-		fmt.Fprintf(buf, "  <splunk-text-area name=\"action.%s.param.%s\" placeholder=\"%s\" id=\"%s\"></splunk-text-area>\n", stanzaName, p.Name, p.Placeholder, p.Name)
+		fmt.Fprintf(buf, "  <splunk-text-area name=\"action.%s.param.%s\" placeholder=\"%s\" id=\"%s\"></splunk-text-area>\n", stanzaName, p.Name, p.placeholder, p.Name)
 	case ParamTypeDropdown:
 		fmt.Fprintf(buf, "  <splunk-select name=\"action.%s.param.%s\" id=\"%s\">\n", stanzaName, p.Name, p.Name)
 		for _, c := range p.availableOptions {
@@ -92,61 +118,26 @@ func (p *Param) getUIHTML(stanzaName string) string {
 	return buf.String()
 }
 
-// getAlertActionsConf returns a string which can be used to describe the parameter within splunk's default/alert_actions.conf file
-func (p *Param) getCustomConf() string {
+// GenerateDocumentation returns a markdown-formatted list-item which describes the parameter
+func (p *Param) GenerateDocumentation() string {
 	buf := new(strings.Builder)
-	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
-	buf.Grow(512)
-	if p.Required {
-		fmt.Fprintf(buf, "# %s: (required) %s \n", p.Title, strings.ReplaceAll(p.Description, "\n", " "))
-	} else {
-		fmt.Fprintf(buf, "# %s: %s\n", p.Title, strings.ReplaceAll(p.Description, "\n", " "))
-	}
-	if len(p.availableOptions) > 0 {
-		fmt.Fprintf(buf, "# Available choices: %s\n", strings.Join(p.GetChoices(), "; "))
-	}
-
-	fmt.Fprintf(buf, "%s = %s\n", p.Name, strings.ReplaceAll(p.DefaultValue, "\n", "\\\n"))
-
-	return buf.String()
-}
-
-// getAlertActionsSpec returns a string which can be used to describe the parameter within splunk's README/alert_actions.conf.spec file
-func (p *Param) getCustomSpec() string {
-	buf := new(strings.Builder)
-	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
-	buf.Grow(512)
-	fmt.Fprintf(buf, `%s = <string>
-*  %s: %s
-*  Required: %v
-*  Default value: "%s"
-`, p.Name, p.Title, strings.ReplaceAll(p.Description, "\n", " "), p.Required, strings.ReplaceAll(p.DefaultValue, "\n", " "))
-	if len(p.availableOptions) > 0 {
-		fmt.Fprintf(buf, "*  Available choices: %s", strings.Join(p.GetChoices(), "; "))
-	}
-	return buf.String()
-}
-
-// getDocumentation returns a markdown-formatted list-item which describes the parameter
-func (p *Param) getDocumentation() string {
-	buf := new(strings.Builder)
-	if p.ConfigFile != "" && p.Stanza != "" {
+	if p.configFile != "" && p.stanza != "" {
 		// this is a global parameter
-		configFile := p.ConfigFile
+		configFile := p.configFile
 		if !strings.HasSuffix(configFile, ".conf") {
 			configFile = configFile + ".conf"
 		}
-		fmt.Fprintf(buf, "- %s/[%s]: `%s` : %s - ", configFile, p.Stanza, p.Name, p.Title)
+		fmt.Fprintf(buf, "- %s/[%s]: `%s` : %s - ", configFile, p.stanza, p.Name, p.Title)
 	} else {
 		fmt.Fprintf(buf, "- `%s` : %s - ", p.Name, p.Title)
 	}
-	if p.Required {
+	if p.required {
 		fmt.Fprintf(buf, "(required) ")
 	}
 	fmt.Fprint(buf, p.Description)
 
-	if p.DefaultValue != "" {
-		fmt.Fprintf(buf, "    Default value: `%s`", p.DefaultValue)
+	if p.defaultValue != "" {
+		fmt.Fprintf(buf, "    Default value: `%s`", p.defaultValue)
 	}
 
 	if len(p.availableOptions) > 0 {
