@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/prigio/splunk-go-sdk/splunkd"
 	"github.com/prigio/splunk-go-sdk/utils"
 )
 
@@ -200,4 +201,29 @@ func (p *Param) SetSensitive() {
 // GetConfigDefinition returns a triple (configFile, stanza, param name) defining where this parameter has been defined.
 func (p *Param) GetConfigDefinition() (configFile, stanza, paramName string) {
 	return p.configFile, p.stanza, p.Name
+}
+
+// ReadValue connects to splunk and retrieves the system-wide value for this parameter
+func (p *Param) ReadValue(client *splunkd.Client) (string, error) {
+	var (
+		val    string
+		err    error
+		stanza *splunkd.ConfigResource
+	)
+
+	configsCollection := splunkd.NewConfigsCollection(client, p.configFile)
+	stanza, err = configsCollection.GetStanza(p.stanza)
+	if err != nil {
+		return "", fmt.Errorf("readValue: stanza '%s' not found in config '%s'. %w", p.stanza, p.configFile, err)
+	}
+	if val, err = stanza.GetString(p.Name); err != nil {
+		return "", fmt.Errorf("readValue: required parameter not found '%s:[%s]/%s. %w'", p.configFile, p.stanza, p.Name, err)
+	}
+	if val == "" {
+		return p.defaultValue, nil
+	}
+	if err = p.setValue(val); err != nil {
+		return "", fmt.Errorf("readValue: %w", err)
+	}
+	return val, nil
 }

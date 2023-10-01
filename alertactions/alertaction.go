@@ -297,6 +297,10 @@ func (aa *AlertAction) GetNamespace() (*splunkd.Namespace, error) {
 // Prerequisites to execution: a runtime configuration must be already available (aa.setConfig()) when performing this method.
 // The client has already been authenticated using the sessionKey which Splunk provides when starting the alert.
 func (aa *AlertAction) setSplunkService() error {
+	var (
+		ss  *splunkd.Client
+		err error
+	)
 	if aa.splunkd != nil {
 		// already available
 		return nil
@@ -305,13 +309,13 @@ func (aa *AlertAction) setSplunkService() error {
 		return fmt.Errorf("setSplunkService: no runtime config available. impossible to use it to initialize splunkd client")
 	}
 	// alert actions run locally on splunk servers. It might well be that certificates are self-generated there.
-	ss, err := splunkd.New(aa.runtimeConfig.ServerUri, true, "")
+	ss, err = splunkd.New(aa.runtimeConfig.ServerUri, true, "")
 	ss.SetNamespace(aa.GetOwner(), aa.GetApp(), splunkd.SplunkSharingGlobal)
 	if err != nil {
 		return fmt.Errorf("setSplunkService: %w", err)
 	}
 
-	if err := ss.LoginWithSessionKey(aa.runtimeConfig.SessionKey); err != nil {
+	if err = ss.LoginWithSessionKey(aa.runtimeConfig.SessionKey); err != nil {
 		return fmt.Errorf("setSplunkService: %w", err)
 	}
 
