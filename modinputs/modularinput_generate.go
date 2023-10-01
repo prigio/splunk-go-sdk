@@ -24,6 +24,33 @@ func (mi *ModularInput) generateInputsSpec() string {
 	return buf.String()
 }
 
+// generateExampleConf returns a string containing a sample configuration
+// for the modular input based on its definition
+// this can help an user test a configuration within splunk's inputs.conf
+func (mi *ModularInput) generateExampleConf() string {
+	var sb strings.Builder
+	fmt.Fprint(&sb, "# Example configs for local/inputs.conf\n")
+	fmt.Fprintf(&sb, "# %s\n", mi.Description)
+	fmt.Fprintf(&sb, "[%s://name-of-input]\n", mi.StanzaName)
+
+	for _, arg := range mi.Args {
+		fmt.Fprintf(&sb, "# %s - %s\n", arg.Title, arg.Description)
+		if arg.DefaultValue != "" {
+			fmt.Fprintf(&sb, "# Default value: %s\n", arg.DefaultValue)
+		}
+		fmt.Fprintf(&sb, "%s = <%s>\n", arg.Name, arg.DataType)
+	}
+	fmt.Fprint(&sb, "# Standard input configurations\n")
+	fmt.Fprint(&sb, "index = <index>\n")
+	if mi.defaultSourcetype != "" {
+		fmt.Fprintf(&sb, "sourcetype = %s\n", mi.defaultSourcetype)
+	} else {
+		fmt.Fprint(&sb, "sourcetype = <sourcetype>\n")
+	}
+	fmt.Fprint(&sb, "interval = <cron schedule>\n")
+	return sb.String()
+}
+
 // generateAlertActionsConf returns a string which can be used to define the alert action within the splunk configuration file default/alert_actions.conf
 func (mi *ModularInput) generateInputsConf() string {
 	buf := new(strings.Builder)

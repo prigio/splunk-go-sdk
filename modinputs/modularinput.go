@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mattn/go-isatty"
 	"github.com/prigio/splunk-go-sdk/alertactions"
+	"github.com/prigio/splunk-go-sdk/splunkd"
 	"github.com/prigio/splunk-go-sdk/utils"
 )
 
@@ -73,6 +74,7 @@ type ModularInput struct {
 	stderr io.Writer
 
 	// These parameters are read-in from the XML-based configurations provided on stdin by splunk upon execution
+	splunkd       *splunkd.Client
 	hostname      string
 	uri           string
 	sessionKey    string
@@ -147,6 +149,46 @@ func (mi *ModularInput) GetRunId() string {
 		mi.runID = uuid.New().String()[0:8]
 	}
 	return mi.runID
+}
+
+// GetSplunkService returns a client which can be used to communicate with splunkd.
+// The client has already been authenticated using the sessionKey which Splunk provides when starting the modular input.
+func (mi *ModularInput) GetSplunkService() (*splunkd.Client, error) {
+	if mi.splunkd != nil {
+		return mi.splunkd, nil
+	}
+	if err := mi.setSplunkService(); err != nil {
+		return nil, err
+	}
+	return mi.splunkd, nil
+}
+
+// setSplunkService configures the splunkd client
+// Prerequisites to execution: a runtime configuration (sessionkey + splunkd URI) must be already available when performing this method.
+// The client has already been authenticated using the sessionKey which Splunk provides when starting the modular input.
+func (mi *ModularInput) setSplunkService() error {
+	var (
+		ss  *splunkd.Client
+		err error
+	)
+	if mi.splunkd != nil {
+		// already available
+		return nil
+	}
+	if mi.sessionKey == "" || mi.uri == "" {
+		return fmt.Errorf("setSplunkService: cannot instantiate a splunkd client as the necessary sessionKey and Uri have not been initialized")
+	}
+	// alert actions run locally on splunk servers. It might well be that certificates are self-generated there.
+	ss, err = splunkd.New(mi.uri, true, "")
+	if err != nil {
+		return fmt.Errorf("setSplunkService: %w", err)
+	}
+	//ss.SetNamespace()
+	if err = ss.LoginWithSessionKey(mi.sessionKey); err != nil {
+		return fmt.Errorf("setSplunkService: %w", err)
+	}
+	mi.splunkd = ss
+	return nil
 }
 
 // RegisterNewParam adds a NEW argument to the modular input.
@@ -518,7 +560,7 @@ You can use the following configuration by:
 		// print out the definition of the modular input for inputs.conf.spec
 		fmt.Fprintln(stdout, mi.generateInputsSpec())
 	} else if *getExamplePtr {
-		fmt.Fprintln(stdout, mi.getExampleConf())
+		fmt.Fprintln(stdout, mi.generateExampleConf())
 	} else if *getDocuPtr {
 		fmt.Fprintln(stdout, mi.generateDocumentation())
 	} else if *getCustConfPtr {
@@ -664,33 +706,6 @@ func (mi *ModularInput) getLoggingSourcetype() string {
 		return mi.internalLogEvent.SourceType
 	}
 	return "modinput:" + mi.defaultSourcetype
-}
-
-// getExampleConf returns a string containing a sample configuration
-// for the modular input based on its definition
-// this can help an user test a configuration within splunk's inputs.conf
-func (mi *ModularInput) getExampleConf() string {
-	var sb strings.Builder
-	fmt.Fprint(&sb, "# Example configs for local/inputs.conf\n")
-	fmt.Fprintf(&sb, "# %s\n", mi.Description)
-	fmt.Fprintf(&sb, "[%s://name-of-input]\n", mi.StanzaName)
-
-	for _, arg := range mi.Args {
-		fmt.Fprintf(&sb, "# %s - %s\n", arg.Title, arg.Description)
-		if arg.DefaultValue != "" {
-			fmt.Fprintf(&sb, "# Default value: %s\n", arg.DefaultValue)
-		}
-		fmt.Fprintf(&sb, "%s = <%s>\n", arg.Name, arg.DataType)
-	}
-	fmt.Fprint(&sb, "# Standard input configurations\n")
-	fmt.Fprint(&sb, "index = <index>\n")
-	if mi.defaultSourcetype != "" {
-		fmt.Fprintf(&sb, "sourcetype = %s\n", mi.defaultSourcetype)
-	} else {
-		fmt.Fprint(&sb, "sourcetype = <sourcetype>\n")
-	}
-	fmt.Fprint(&sb, "interval = <cron schedule>\n")
-	return sb.String()
 }
 
 // getXMLScheme returns a string containing a XML-based description

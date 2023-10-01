@@ -1,0 +1,570 @@
+@startuml
+package splunkd{
+annotation splunkd {
+-const KVStoreFieldTypeCIDR: string
+-const KVStoreFieldTypeTime: string
+-const KVStoreFieldTypeNone: string
+-const KVStoreFieldTypeArray: string
+-const KVStoreFieldTypeNumber: string
+-const KVStoreFieldTypeBool: string
+-const KVStoreFieldTypeString: string
+-const pathLogin: STRING
+-const defaultHost: STRING
+-const defaultPort: INT
+-const httpTimeout: 
+-const defaultScheme: STRING
+-const SplunkSharingSystem: SplunkSharing
+-const SplunkSharingGlobal: SplunkSharing
+-const SplunkSharingUser: SplunkSharing
+-const SplunkSharingApp: SplunkSharing
+
++NewConfigsCollection(ss *Client, configFileName string): *ConfigsCollection
++NewConfigsCollectionNS(ss *Client, configFileName string, owner string, app string): *ConfigsCollection
+-urlEncodeCredential(user string, realm string): string
++NewCredentialsCollection(ss *Client): *CredentialsCollection
++NewKVStoreCollCollection(ss *Client): *KVStoreCollCollection
++NewUsersCollection(ss *Client): *UsersCollection
++New(splunkdUrl string, insecureSkipVerify bool, proxy string): *Client, error
++NewFromDefaults(): *Client, error
++NewInteractive(): *Client, error
+-getUrl(collectionPath string, entry string): string
++NewNamespace(owner string, app string, sharing SplunkSharing): *Namespace, error
+-doSplunkdHttpRequest(ss *Client, method string, urlPath string, urlParams *Values, body []byte, contentType string, parseJSONResultInto *T): error
+-interfaceToBool(v interface): bool
+}
+class AccessControlList {
++App: string
++Owner: string
++Sharing: string
++Perms: interface{}
++CanWrite: bool
++CanShareGlobal: bool
++CanShareApp: bool
++CanShareUser: bool
++ServicesNSPath(): string
++ToURL(): *Values
+}
+class AppResource {
++Label: string
++Description: string
++Author: string
++Version: string
++Configured: bool
++Core: bool
++StateChangeRequiresRestart: bool
++Disabled: bool
++Visible: bool
++ShowInNav: bool
++ManagedByDeploymentClient: bool
++CheckForUpdates: bool
+
+}
+class AppsCollection {
++: collection[AppResource]
+
+}
+class ContextResource {
++Capabilities: []string
++Version: string
++DefaultApp: string
++Email: string
++LockedOut: bool
++Realname: string
++Roles: []string
++Username: string
++LastLoginEpoch: int64
++LastLogin: Time
+
+}
+class ConfigsCollection {
++: collection[ConfigResource]
++CreateStanza(name string, params *Values): *entry[ConfigResource], error
++GetStanza(name string): *ConfigResource, error
++GetConfigAsString(stanza string, configName string): string, error
++GetConfigAsInt(stanza string, configName string): int, error
++GetConfigAsFloat(stanza string, configName string): float32, error
+}
+class ConfigResource {
+
++GetString(key string): string, error
++GetInt(key string): int, error
++GetFloat(key string): float32, error
+}
+class CredentialResource {
++Realm: string
++Username: string
++ClearPassword: string
++EncrPassword: string
+
+}
+class CredentialsCollection {
++: collection[CredentialResource]
++CreateCred(user string, realm string, password string): *entry[CredentialResource], error
++GetCred(user string, realm string): *entry[CredentialResource], error
++UpdateCred(user string, realm string, newPassword string): error
++UpdateCredACL(user string, realm string, acl AccessControlList): error
+}
+class InfoResource {
++Version: string
++Build: string
++CpuArch: string
++Guid: string
++HealthInfo: string
++ServerName: string
++NumberOfCores: int
++NumberOfVirtualCores: int
++PhysicalMemoryMB: int
++OsBuild: string
++OsName: string
++OsVersion: string
+
+}
+class KVStoreFieldDefinition {
++Name: string
++Type: string
+
+}
+class KVStoreCollResource {
++Disabled: bool
++EnforceTypes: bool
++Replicate: bool
++Fields: map[string]string
++AcceleratedFields: map[string]string
++UnmarshalJSON(data []byte): error
+}
+class KVStoreCollCollection {
++: collection[KVStoreCollResource]
++CreateKVStoreColl(ns *Namespace, entryName string, fields map[string]string, acceleratedFields map[string]string, enforceTypes bool, replicate bool): *entry[KVStoreCollResource], error
+}
+class splunkdLogger {
+-name: string
+-loggingParams: Values
+-splunkd: *Client
++Write(p []byte): int, error
+}
+class logResult {
++Index: string
++Host: string
++Source: string
++Sourcetype: string
++Bytes: int
+
+}
+class LoginResponse {
++SessionKey: string
++Message: string
++Code: string
+
+}
+class UsersCollection {
++: collection[UserResource]
++CreateUser(name string, details UserResource): *entry[UserResource], error
+}
+class UserResource {
++Realname: string
++Email: string
++DefaultApp: string
++Password: string
++OldPassword: string
++Roles: []string
++Lang: string
++Tz: string
++ForceChangePass: bool
++LastSuccessfulLogin: int64
++LockedOut: bool
++Capabilities: []string
++UserType: string
+
+}
+class Client {
+-baseUrl: string
+-authToken: string
+-sessionKey: string
+-nameSpace: Namespace
+-httpClient: *Client
+-credentials: *CredentialsCollection
+-users: *UsersCollection
+-kvstore: *KVStoreCollCollection
+-authContext: *ContextResource
+-info: *InfoResource
++AuthContext(): *ContextResource, error
++Can(capability string): bool, error
++Has(role string): bool, error
++Username(): string, error
++Info(): *InfoResource, error
++NewLogger(name string, flag int, index string, host string, source string, sourcetype string): *Logger
++Login(username string, password string, passcode2FA string): error
++LoginWithToken(authToken string): error
++LoginWithSessionKey(sessionKey string): error
++GetSessionKey(): string
++GetSplunkdURI(): string
++SetNamespace(owner string, app string, sharing SplunkSharing): error
++SetNamespaceFromNS(ns Namespace)
++GetCredentials(): *CredentialsCollection
++GetUsers(): *UsersCollection
++GetKVStore(): *KVStoreCollCollection
+}
+class collection[T] {
+-name: string
+-path: string
+-splunkd: *Client
+-mu: RWMutex
++Origin: string
++Link: string
++Updated: string
++Paging: interface{}
++Entries: []entry[T]
+-isInitialized(): error
++Create(entryName string, params *Values): *entry[T], error
++List(): []entry[T], error
++Search(filter string): []entry[T], error
+-list(searchParams Values): []entry[T], error
++Exists(entryName string): bool
++Get(entryName string): *entry[T], error
++CreateNS(ns *Namespace, entryName string, params *Values): *entry[T], error
++Update(entryName string, params *Values): error
++Delete(entryName string): error
++DeleteEntry(e *entry[T]): error
++UpdateACL(entryName string, acl AccessControlList): error
+}
+class entry[T] {
++Name: string
++Id: string
++Author: string
++Links: interface{}
++ACL: AccessControlList
++Content: T
+-setSharing(ss *Client, sharing SplunkSharing): error
++SetSharingGlobal(ss *Client): error
+}
+class Namespace {
+-owner: string
+-app: string
+-sharing: SplunkSharing
++GetServicesNSUrl(): string
+}
+class SplunkSharing {
+
+
+}
+class discardBody {
+
+
+}
+}
+package alertactions{
+annotation alertactions {
+-const ParamTypeColorPicker: 
+-const ParamTypeRadio: 
+-const ParamTypeText: ParamType
+-const ParamTypeTextArea: 
+-const ParamTypeSearchDropdown: 
+-const ParamTypeDropdown: 
+-var isAtTerminal: 
++New(stanzaName string, label string, description string, iconPath string): *AlertAction, error
+-getAlertConfigFromJSON(input Reader): *alertConfig, error
++NewGlobalParam(configFile string, stanza string, name string, title string, description string, defaultValue string, required bool): *Param, error
++NewParam(name string, title string, description string, defaultValue string, placeholder string, uiType ParamType, required bool): *Param, error
+-newParameter(configFile string, stanza string, name string, title string, description string, defaultValue string, placeholder string, uiType ParamType, required bool): *Param, error
+}
+class AlertingFunc {
+
+
+}
+class AlertAction {
++StanzaName: string
++Label: string
++Description: string
++Documentation: string
++IconPath: string
+-params: []*Param
+-globalParams: []*Param
+-validateParams: AlertingFunc
+-execute: AlertingFunc
+-debug: bool
+-runID: string
+-runtimeConfig: *alertConfig
+-splunkd: *Client
+-splunkdlogger: *Logger
+-endUserLogger: *Logger
+-stdin: Reader
+-stdout: Writer
+-stderr: Writer
++EnableDebug()
++RegisterParam(p *Param): error
++RegisterNewParam(name string, title string, description string, defaultValue string, placeholder string, uiType ParamType, required bool): *Param, error
++GetParam(name string): *Param, error
++GetParamNames(): []string
++RegisterGlobalParam(p *Param): error
++RegisterNewGlobalParam(configFile string, stanza string, name string, title string, description string, defaultValue string, required bool): *Param, error
++GetGlobalParam(name string): *Param, error
++GetFirstResult(): map[string]interface
++GetSearchUri(): string
++GetSearchName(): string
++GetApp(): string
++GetOwner(): string
++GetResultsFile(): *File, error
++GetResultsFileReader(f *File): *Reader, error
++GetResultsLink(): string
++GetSid(): string
++GetNamespace(): *Namespace, error
+-setSplunkService(): error
++GetRunId(): string
++GetSplunkService(): *Client, error
+-initRuntime(c *alertConfig): error
+-setGlobalParams(): error
+-setParams(): error
++RegisterValidationFunc(f AlertingFunc)
++RegisterAlertFunc(f AlertingFunc)
+-printHelp(f *FlagSet)
++Run(args []string, stdin Reader, stdout Writer, stderr Writer): error
+}
+class alertConfig {
++App: string
++Owner: string
++ResultsFile: string
++ResultsLink: string
++SearchUri: string
++ServerHost: string
++ServerUri: string
++SessionKey: string
++Sid: string
++SearchName: string
++Configuration: map[string]string
++Result: map[string]interface
+
+}
+class ParamType {
+
+
+}
+class paramOption {
++Value: string
++VisibleValue: string
+
+}
+class ArgValidation {
+
+
+}
+class Param {
++Title: string
++Name: string
++Description: string
+-dataType: ParamDataType
+-uiType: ParamType
+-defaultValue: string
+-placeholder: string
+-required: bool
+-sensitive: bool
+-configFile: string
+-stanza: string
+-availableOptions: []paramOption
+-actualValue: string
+-actualValueIsSet: bool
++AddChoice(value string, visibleValue string): error
+-setValue(v string): error
++GetValue(): string
++GetChoices(): []string
++SetSensitive()
++GetConfigDefinition(): string, string, string
+}
+class ParamDataType {
+
+
+}
+}
+package modinputs{
+annotation modinputs {
+-const ArgValidationIsNonNegInt: ArgValidation
+-const ArgDataTypeBool: STRING
+-const ArgDataTypeNumber: STRING
+-const ArgValidationIsPort: ArgValidation
+-const ArgValidationIsPosInt: ArgValidation
+-const ArgDataTypeStr: STRING
+-const ArgValidationIsAvailTCPPort: ArgValidation
+-const ArgValidationIsAvailUDPPort: ArgValidation
+-const ArgValidationIsBool: ArgValidation
+-var isAtTerminal: 
++GenerateArgValidation(paramName string, validation ArgValidation): string
++GenerateArgValidationComplex(paramName string, checkClause string, errorMessage string): string
++GenerateArgValidationRegex(paramName string, regex string, errorMessage string): string
+-getInputConfigFromXML(input Reader): *inputConfig, error
+-getInputConfigInteractive(mi *ModularInput): *inputConfig, error
+-getValidationConfigFromXML(input Reader): *validationConfig, error
++New(stanzaName string, label string, description string): *ModularInput, error
+}
+class SplunkEvent {
++Unbroken: bool
++Done: bool
++Time: Time
+-cachedTime: Time
++Data: string
++SourceType: string
++Index: string
++Host: string
++Source: string
++Stanza: string
+-cachedEpochStr: string
+-epochTimeStr(): string
+-writeOut(): int, error
+-xml(): string, error
+}
+class ArgValidation {
+
+
+}
+class InputArg {
++XMLName: Name
++Title: string
++Name: string
++Description: string
++DataType: string
++DefaultValue: string
++Validation: string
++RequiredOnCreate: bool
++RequiredOnEdit: bool
++SetValidation(validationRule ArgValidation)
++SetCustomValidation(condition string, errorMessage string)
+-getInputsSpec(): string
+-getInputsConf(): string
++GenerateDocumentation(): string
+}
+class validationConfig {
++XMLName: Name
++Hostname: string
++URI: string
++SessionKey: string
++CheckpointDir: string
++Item: Stanza
+
+}
+class inputConfig {
++XMLName: Name
++Hostname: string
++URI: string
++SessionKey: string
++CheckpointDir: string
++Stanzas: []Stanza
+
+}
+class StreamingFunc {
+
+
+}
+class StreamingFuncSingleInstance {
+
+
+}
+class ValidationFunc {
+
+
+}
+class ModularInput {
++StanzaName: string
++Title: string
++Description: string
++Documentation: string
+-useExternalValidation: bool
+-useSingleInstance: bool
++Args: []InputArg
+-globalParams: []*Param
+-validate: ValidationFunc
+-stream: StreamingFunc
+-streamSingleInstance: StreamingFuncSingleInstance
+-debug: bool
+-defaultSourcetype: string
+-defaultIndex: string
+-stdin: Reader
+-stdout: Writer
+-stderr: Writer
+-hostname: string
+-uri: string
+-sessionKey: string
+-checkpointDir: string
+-stanzas: []Stanza
+-runID: string
+-internalLogEvent: *SplunkEvent
+-cntDataEventsGeneratedbyStanza: int64
+-cntDataEventsGeneratedTotal: int64
++SetSingleInstanceExecution(): error
++RegisterStreamingFunc(f StreamingFunc): error
++RegisterStreamingFuncSingleInstance(f StreamingFuncSingleInstance): error
++EnableDebug()
++IsDebug(): bool
++GetRunId(): string
++RegisterNewParam(name string, title string, description string, defaultValue string, dataType string, validation string, requiredOnCreate bool, requiredOnEdit bool): *InputArg, error
++RegisterNewGlobalParam(configFile string, stanza string, name string, title string, description string, defaultValue string, required bool): *Param, error
++GetGlobalParam(name string): *Param, error
++RegisterValidationFunc(f ValidationFunc)
++Log(level string, message string, a ... interface): error
+-logPlain(level string, message string, a ... interface): error
++WriteToSplunk(se *SplunkEvent): error
++SetDefaultSourcetype(st string)
++GetDefaultSourcetype(): string
++SetDefaultIndex(idx string)
++GetDefaultIndex(): string
++NewDefaultEvent(stanza *Stanza): *SplunkEvent
+-printHelp()
++Run(args []string, stdin Reader, stdout Writer, stderr Writer): error
+-runStreaming(): error
+-runValidation(): error
+-setupEventBasedInternalLogging(stanza *Stanza)
+-setupEventBasedInternalLoggingSingleInstance()
+-getLoggingSourcetype(): string
+-getExampleConf(): string
+-getXMLScheme(): string, error
+}
+class Stanza {
++Name: string
++App: string
++Params: []Param
++ParamLists: []ParamList
++KVString(): string
++Scheme(): string
++InputName(): string
++Param(name string): string
++ParamAsCSVList(name string): []string
++ParamAsList(name string, sep string): []string
++ParamList(name string): []string
++Host(): string
++Index(): string
++Source(): string
++Sourcetype(): string
++Interval(): string
+}
+class Param {
++XMLName: Name
++Name: string
++Value: string
+
+}
+class ParamList {
++XMLName: Name
++Name: string
++Values: []string
+
+}
+}
+"entry[T]" --> "AccessControlList"
+"Client" --> "ContextResource"
+"Client" --> "CredentialsCollection"
+"Client" --> "InfoResource"
+"Client" --> "KVStoreCollCollection"
+"splunkdLogger" --> "Client"
+"Client" --> "UsersCollection"
+"collection[T]" --> "Client"
+"Client" --> "Namespace"
+"AlertAction" --> "Client"
+"Namespace" --> "SplunkSharing"
+"AlertAction" --> "AlertingFunc"
+"AlertAction" --> "alertConfig"
+"Param" --> "ParamType"
+"Param" --> "ParamDataType"
+"ModularInput" --> "SplunkEvent"
+"validationConfig" --> "Stanza"
+"ModularInput" --> "StreamingFunc"
+"ModularInput" --> "StreamingFuncSingleInstance"
+"ModularInput" --> "ValidationFunc"
+
+@enduml
