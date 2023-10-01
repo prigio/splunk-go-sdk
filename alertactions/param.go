@@ -206,13 +206,12 @@ func (p *Param) GetConfigDefinition() (configFile, stanza, paramName string) {
 // ReadValue connects to splunk and retrieves the system-wide value for this parameter
 func (p *Param) ReadValue(client *splunkd.Client) (string, error) {
 	var (
-		val    string
-		err    error
-		stanza *splunkd.ConfigResource
+	//val    string
+	//stanza *splunkd.PropertyResource
 	)
-
-	configsCollection := splunkd.NewConfigsCollection(client, p.configFile)
-	stanza, err = configsCollection.GetStanza(p.stanza)
+	col := splunkd.NewPropertiesCollection(client, p.configFile, p.stanza)
+	return col.GetProperty(p.Name)
+	/*stanza, err = col.GetStanza(p.stanza)
 	if err != nil {
 		return "", fmt.Errorf("readValue: stanza '%s' not found in config '%s'. %w", p.stanza, p.configFile, err)
 	}
@@ -226,4 +225,30 @@ func (p *Param) ReadValue(client *splunkd.Client) (string, error) {
 		return "", fmt.Errorf("readValue: %w", err)
 	}
 	return val, nil
+	*/
+}
+
+// ReadValue connects to splunk and retrieves the system-wide value for this parameter
+func (p *Param) ReadValueNS(client *splunkd.Client, owner, app string) (string, error) {
+	var (
+	//val    string
+	//stanza *splunkd.PropertyResource
+	)
+	col := splunkd.NewPropertiesCollectionNS(client, p.configFile, p.stanza, owner, app)
+	return col.GetProperty(p.Name)
+	/*stanza, err = col.GetStanza(p.stanza)
+	if err != nil {
+		return "", fmt.Errorf("readValue: stanza '%s' not found in config '%s'. %w", p.stanza, p.configFile, err)
+	}
+	if val, err = stanza.GetString(p.Name); err != nil {
+		return "", fmt.Errorf("readValue: required parameter not found '%s:[%s]/%s. %w'", p.configFile, p.stanza, p.Name, err)
+	}
+	if val == "" {
+		return p.defaultValue, nil
+	}
+	if err = p.setValue(val); err != nil {
+		return "", fmt.Errorf("readValue: %w", err)
+	}
+	return val, nil
+	*/
 }

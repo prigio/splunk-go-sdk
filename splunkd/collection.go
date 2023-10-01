@@ -124,7 +124,7 @@ func (col *collection[T]) Get(entryName string) (*entry[T], error) {
 	fullUrl := getUrl(col.path, entryName)
 	tmpCol := collection[T]{}
 	if err := doSplunkdHttpRequest(col.splunkd, "GET", fullUrl, nil, nil, "", &tmpCol); err != nil {
-		return nil, fmt.Errorf("%s get: %w", col.name, err)
+		return nil, fmt.Errorf("%s get '%s': %w", col.name, fullUrl, err)
 	}
 	return &tmpCol.Entries[0], nil
 }
