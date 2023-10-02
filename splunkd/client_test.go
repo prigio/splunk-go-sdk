@@ -9,7 +9,7 @@ var ss *Client
 var err error
 
 const (
-	testing_endpoint = "https://splunk:5089"
+	testing_endpoint = "https://splunk:2089"
 	testing_user     = "admin"
 	testing_password = "splunked"
 	testing_jwtToken = ""

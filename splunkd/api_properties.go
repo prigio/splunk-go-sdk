@@ -2,7 +2,10 @@ package splunkd
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
+
+	"github.com/prigio/splunk-go-sdk/utils"
 )
 
 // This file provides structs used to parse the JSON-formatted output of the Splunk REST API
@@ -11,69 +14,6 @@ import (
 
 // ConfigResource represents the contents of a configuration file stanza.
 type PropertyResource string
-
-/*
-func (pr *PropertyResource) GetString(key string) (val string, err error) {
-	tmp, exists := (*pr)[key]
-	if !exists {
-		return "", fmt.Errorf("not found: '%s'", key)
-	}
-	switch v := tmp.(type) {
-	case string:
-		return v, nil
-	case int:
-		return strconv.FormatInt(int64(v), 10), nil
-	case float32:
-		return fmt.Sprint(v), nil
-	default:
-		return fmt.Sprintf("%v", v), nil
-	}
-}
-
-func (cr *PropertyResource) GetInt(key string) (val int, err error) {
-	tmp, exists := (*cr)[key]
-	if !exists {
-		return 0, fmt.Errorf("not found: '%s'", key)
-	}
-	switch v := tmp.(type) {
-	case string:
-		intv, err := strconv.ParseInt(v, 10, 0)
-		if err != nil {
-			return 0, fmt.Errorf("conversion error of '%s'. Expected an int value, found '%v'. %s", key, tmp, err.Error())
-		}
-		return int(intv), nil
-	case int:
-		return v, nil
-	case float32:
-		return int(v), nil
-	default:
-		return 0, fmt.Errorf("unsupported type for '%s'. found '%t'", key, v)
-	}
-}
-
-func (cr *PropertyResource) GetFloat(key string) (val float32, err error) {
-	tmp, exists := (*cr)[key]
-	if !exists {
-		return 0, fmt.Errorf("not found: '%s'", key)
-	}
-	switch v := tmp.(type) {
-	case string:
-		floatv, err := strconv.ParseFloat(v, 32)
-		if err != nil {
-			return 0, fmt.Errorf("conversion error of '%s'. Expected a float value, found '%v''. %s", key, tmp, err.Error())
-		}
-		return float32(floatv), nil
-	case int:
-		return float32(v), nil
-	case float32:
-		return v, nil
-	case float64:
-		return float32(v), nil
-	default:
-		return 0, fmt.Errorf("unsupported type for '%s'. found '%t'", key, v)
-	}
-}
-*/
 
 // ConfigsCollection represents a generic configuration file as managed by the /services/configs/conf-<confFileName> endpoint.
 // You can manage config file stanzas through this endpoint.
@@ -84,27 +24,27 @@ type PropertiesCollection struct {
 	collection[PropertyResource]
 }
 
-func NewPropertiesCollection(ss *Client, configFileName string, stanzaName string) *PropertiesCollection {
+func NewPropertiesCollection(ss *Client, configFileName string) *PropertiesCollection {
 	var col = &PropertiesCollection{}
 	configFileName = strings.ToLower(configFileName)
 	// remove .conf from filename, if present
 	configFileName = strings.TrimSuffix(configFileName, ".conf")
 
-	col.name = "properties/" + configFileName + "/" + stanzaName
-	col.path = "properties/" + configFileName + "/" + stanzaName
+	col.name = "properties/" + configFileName
+	col.path = "properties/" + configFileName
 	col.splunkd = ss
 	return col
 }
 
-func NewPropertiesCollectionNS(ss *Client, configFileName, stanzaName string, owner, app string) *PropertiesCollection {
+func NewPropertiesCollectionNS(ss *Client, configFileName, owner, app string) *PropertiesCollection {
 	var col = &PropertiesCollection{}
 	configFileName = strings.ToLower(configFileName)
 	// remove .conf from filename, if present
 	configFileName = strings.TrimSuffix(configFileName, ".conf")
 	ns, _ := NewNamespace(owner, app, SplunkSharingApp)
 
-	col.name = "properties/" + configFileName + "/" + stanzaName
-	col.path = ns.GetServicesNSUrl() + "properties/" + configFileName + "/" + stanzaName
+	col.name = "properties/" + configFileName
+	col.path = ns.GetServicesNSUrl() + "properties/" + configFileName
 	col.splunkd = ss
 	return col
 }
@@ -127,45 +67,95 @@ func NewPropertiesCollectionNS(ss *Client, configFileName, stanzaName string, ow
 		return &entry.Content, nil
 	}
 */
-func (col *PropertiesCollection) GetProperty(propertyName string) (string, error) {
-	entries, err := col.List()
-	if err != nil {
-		return "", fmt.Errorf("getProperty: %w", err)
+
+func (col *PropertiesCollection) GetStanza(name string) (map[string]string, error) {
+	if name == "" {
+		return nil, utils.NewErrInvalidParam(col.name+" getStanza", nil, "name cannot be empty")
 	}
+	tmpCol := collection[PropertyResource]{splunkd: col.splunkd, name: col.name + "/" + name, path: col.path + "/" + name}
+	entries, err := tmpCol.List()
+	if err != nil {
+		return nil, fmt.Errorf("%s getStanza: %w", col.name, err)
+	}
+	properties := make(map[string]string)
 	for _, e := range entries {
-		if e.Name == propertyName {
-			return string(e.Content), nil
-		}
+		properties[e.Name] = string(e.Content)
 	}
-	return "", fmt.Errorf("getProperty: not found '%s' in '%s'", propertyName, col.path)
+	return properties, nil
 }
 
-/*
-// GetConfigAsString retrieves the value of configuration configName of the selected stanza
-func (col *PropertiesCollection) GetConfigAsString(stanza, configName string) (string, error) {
-	stanzaConf, err := col.GetStanza(stanza)
+func (col *PropertiesCollection) Create(name string, properties *url.Values) error {
+	return col.CreateStanza(name, properties)
+}
+
+func (col *PropertiesCollection) CreateStanza(name string, properties *url.Values) error {
+	// https://docs.splunk.com/Documentation/Splunk/9.1.1/RESTREF/RESTconf#properties
+	if name == "" {
+		return utils.NewErrInvalidParam(col.name+" createStanza", nil, "name cannot be empty")
+	}
+	//var discard *discardBody
+	var params url.Values = url.Values{}
+	params.Set("__stanza", name)
+	if err := doSplunkdHttpRequest(col.splunkd, "POST", getUrl(col.path, ""), nil, []byte(params.Encode()), "application/x-www-form-urlencoded", &discardBody{}); err != nil {
+		return fmt.Errorf("%s createStanza %s: %w", col.name, name, err)
+	}
+	return col.SetProperties(name, properties)
+}
+
+func (col *PropertiesCollection) DeleteStanza(stanza string) error {
+	// https://docs.splunk.com/Documentation/Splunk/9.1.1/RESTREF/RESTconf#properties
+	if stanza == "" {
+		return utils.NewErrInvalidParam(col.name+" deleteProperty", nil, "stanza cannot be empty")
+	}
+
+	if err := doSplunkdHttpRequest(col.splunkd, "DELETE", getUrl(col.path, stanza), nil, nil, "", &discardBody{}); err != nil {
+		return fmt.Errorf("%s deleteStanza %s: %w", col.name, stanza, err)
+	}
+	return nil
+}
+
+func (col *PropertiesCollection) SetProperties(stanza string, properties *url.Values) error {
+	// https://docs.splunk.com/Documentation/Splunk/9.1.1/RESTREF/RESTconf#properties
+	if stanza == "" {
+		return utils.NewErrInvalidParam(col.name+" setProperties", nil, "stanza cannot be empty")
+	}
+
+	if properties == nil || len(*properties) == 0 {
+		return nil
+	}
+	if err := doSplunkdHttpRequest(col.splunkd, "POST", getUrl(col.path, stanza), nil, []byte(properties.Encode()), "application/x-www-form-urlencoded", &discardBody{}); err != nil {
+		return fmt.Errorf("%s setProperties %s: %w", col.name, stanza, err)
+	}
+	return nil
+}
+
+func (col *PropertiesCollection) SetProperty(stanza, propertyName, value string) error {
+	// https://docs.splunk.com/Documentation/Splunk/9.1.1/RESTREF/RESTconf#properties
+	if stanza == "" {
+		return utils.NewErrInvalidParam(col.name+" setProperty", nil, "stanza cannot be empty")
+	}
+	if propertyName == "" {
+		return utils.NewErrInvalidParam(col.name+" setProperty", nil, "propertyName cannot be empty")
+	}
+
+	var params url.Values = url.Values{}
+	params.Set(propertyName, value)
+	if err := doSplunkdHttpRequest(col.splunkd, "POST", getUrl(col.path, stanza), nil, []byte(params.Encode()), "application/x-www-form-urlencoded", &discardBody{}); err != nil {
+		return fmt.Errorf("%s setProperty %s/%s: %w", col.name, stanza, propertyName, err)
+	}
+	return nil
+}
+
+func (col *PropertiesCollection) GetProperty(stanza, propertyName string) (string, error) {
+	if stanza == "" {
+		return "", utils.NewErrInvalidParam(col.name+" getProperty", nil, "stanza cannot be empty")
+	}
+	if propertyName == "" {
+		return "", utils.NewErrInvalidParam(col.name+" getProperty", nil, "propertyName cannot be empty")
+	}
+	props, err := col.GetStanza(stanza)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%s getProperty: %w", col.name, err)
 	}
-
-	return stanzaConf.GetString(configName)
+	return props[propertyName], nil
 }
-
-// GetConfigAsInt retrieves the value of configuration configName of the selected stanza
-func (col *PropertiesCollection) GetConfigAsInt(stanza, configName string) (int, error) {
-	stanzaConf, err := col.GetStanza(stanza)
-	if err != nil {
-		return 0, err
-	}
-	return stanzaConf.GetInt(configName)
-}
-
-// GetConfigAsFloat retrieves the value of configuration configName of the selected stanza
-func (col *PropertiesCollection) GetConfigAsFloat(stanza, configName string) (float32, error) {
-	stanzaConf, err := col.GetStanza(stanza)
-	if err != nil {
-		return 0, err
-	}
-	return stanzaConf.GetFloat(configName)
-}
-*/

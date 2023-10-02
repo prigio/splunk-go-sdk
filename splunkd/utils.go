@@ -20,7 +20,7 @@ type discardBody struct{}
 // doSplunkdHttpRequest executes the specified request and returns http code, the body contents and possibly an error
 func doSplunkdHttpRequest[T any](ss *Client, method, urlPath string, urlParams *url.Values, body []byte, contentType string, parseJSONResultInto *T) (err error) {
 	if ss == nil {
-		return utils.NewErrInvalidParam("doSplunkdHttpRequest", nil, "'spunkService' cannot be nil")
+		return utils.NewErrInvalidParam("doSplunkdHttpRequest", nil, "'splunkService' cannot be nil")
 	}
 	method = strings.ToUpper(method)
 	if method != "GET" && method != "POST" && method != "DELETE" && method != "PUT" && method != "HEAD" {
@@ -70,7 +70,7 @@ func doSplunkdHttpRequest[T any](ss *Client, method, urlPath string, urlParams *
 		req.Header.Set("Authorization", "Bearer "+ss.authToken)
 	}
 
-	//log.Printf("DEBUG [splunk service]: performing HTTP %s %s", req.Method, req.URL.Path)
+	//log.Printf("DEBUG [splunk service]: performing HTTP %s %s %s\n", req.Method, req.URL.Path, string(body))
 	if resp, err = ss.httpClient.Do(req); err != nil {
 		//log.Debug("splunk service: HTTP %s %s: %s", req.Method, req.URL.Path, err.Error())
 		return err
@@ -80,12 +80,14 @@ func doSplunkdHttpRequest[T any](ss *Client, method, urlPath string, urlParams *
 		// {"messages":[{"type":"WARN","text":"call not properly authenticated"}]}%
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
+		//log.Printf("DEBUG [splunk service]: reply %s %s", resp.Status, respBody)
 		return fmt.Errorf("HTTP %s '%s':  %s %s - %s", method, fullUrl, resp.Status, http.StatusText(resp.StatusCode), string(respBody))
 	}
-
-	if fmt.Sprintf("%T", parseJSONResultInto) != "discardBody" && parseJSONResultInto != nil {
+	//log.Printf("DBODY: %T\n", parseJSONResultInto)
+	if parseJSONResultInto != nil && fmt.Sprintf("%T", parseJSONResultInto) != "*splunkd.discardBody" {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
+		//log.Printf("DEBUG [splunk service]: reply %s %s", resp.Status, respBody)
 		return json.Unmarshal(respBody, parseJSONResultInto)
 	}
 

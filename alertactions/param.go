@@ -40,7 +40,7 @@ type paramOption struct {
 // Param is a parameter used by the ModularInput. It can be used in two ways:
 //
 //  1. as a regular run-time parameter, whose value is provided by Splunk via STDIN to the alert action during its startup
-//  2. as a global parameter, whose value is statycally configured in some configuration file (normally called after the app hosting the alert action)
+//  2. as a global parameter, whose value is statically configured in some configuration file (normally called after the app hosting the alert action)
 //
 // Initialize this struct using the proper functions.
 // Note: because the value of a Param is set based on Splunk configurations, you cannot explicitly set this.
@@ -86,6 +86,7 @@ func NewGlobalParam(configFile, stanza, name, title, description, defaultValue s
 
 // NewParam instantiates a parameter, whose value is provided by splunk to the alert action when starting it up
 func NewParam(name, title, description, defaultValue, placeholder string, uiType ParamType, required bool) (*Param, error) {
+	// there is no stanza setting for a non-global parameter, as they might be defined in one or more stanzas.
 	return newParameter("alert_actions.conf", "", name, title, description, defaultValue, placeholder, uiType, required)
 }
 
@@ -209,23 +210,8 @@ func (p *Param) ReadValue(client *splunkd.Client) (string, error) {
 	//val    string
 	//stanza *splunkd.PropertyResource
 	)
-	col := splunkd.NewPropertiesCollection(client, p.configFile, p.stanza)
-	return col.GetProperty(p.Name)
-	/*stanza, err = col.GetStanza(p.stanza)
-	if err != nil {
-		return "", fmt.Errorf("readValue: stanza '%s' not found in config '%s'. %w", p.stanza, p.configFile, err)
-	}
-	if val, err = stanza.GetString(p.Name); err != nil {
-		return "", fmt.Errorf("readValue: required parameter not found '%s:[%s]/%s. %w'", p.configFile, p.stanza, p.Name, err)
-	}
-	if val == "" {
-		return p.defaultValue, nil
-	}
-	if err = p.setValue(val); err != nil {
-		return "", fmt.Errorf("readValue: %w", err)
-	}
-	return val, nil
-	*/
+	col := splunkd.NewPropertiesCollection(client, p.configFile)
+	return col.GetProperty(p.stanza, p.Name)
 }
 
 // ReadValue connects to splunk and retrieves the system-wide value for this parameter
@@ -234,21 +220,6 @@ func (p *Param) ReadValueNS(client *splunkd.Client, owner, app string) (string, 
 	//val    string
 	//stanza *splunkd.PropertyResource
 	)
-	col := splunkd.NewPropertiesCollectionNS(client, p.configFile, p.stanza, owner, app)
-	return col.GetProperty(p.Name)
-	/*stanza, err = col.GetStanza(p.stanza)
-	if err != nil {
-		return "", fmt.Errorf("readValue: stanza '%s' not found in config '%s'. %w", p.stanza, p.configFile, err)
-	}
-	if val, err = stanza.GetString(p.Name); err != nil {
-		return "", fmt.Errorf("readValue: required parameter not found '%s:[%s]/%s. %w'", p.configFile, p.stanza, p.Name, err)
-	}
-	if val == "" {
-		return p.defaultValue, nil
-	}
-	if err = p.setValue(val); err != nil {
-		return "", fmt.Errorf("readValue: %w", err)
-	}
-	return val, nil
-	*/
+	col := splunkd.NewPropertiesCollectionNS(client, p.configFile, owner, app)
+	return col.GetProperty(p.stanza, p.Name)
 }
