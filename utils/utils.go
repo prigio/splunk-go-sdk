@@ -207,3 +207,53 @@ func ListOfVals[T any, PT any](source []T, accessor func(*T) PT) []PT {
 	}
 	return res
 }
+
+/*
+func InteractivelyConfigureGlobalParams(params []alertactions.Param) error {
+	if len(params) == 0 {
+		return nil
+	}
+
+	var (
+		err        error
+		ss         *splunkd.Client
+		app, owner string
+	)
+
+	fmt.Println("> Interactively provide information to access local splunkd service.")
+	// first, need to get splunk endpoint, username and password to be able to login into the service
+	ss, err = splunkd.NewInteractive()
+	if err != nil {
+		return fmt.Errorf("interactivelyConfigureGlobalParams: %w", err)
+	}
+
+	fmt.Println("> Select the application context in which to store the configurations. E.g. 'system', 'search', 'some-app-name'.")
+	app = AskForInput("Splunk app context", "", false)
+	owner, _ = ss.Username()
+
+	fmt.Println("> Interactively provide values for parameters.")
+
+	for _, p := range params {
+		fmt.Printf("> %s - %s", p.Title, p.Description, p.GetChoices())
+		if len(p.GetChoices()) > 0 {
+			fmt.Printf("\t	Available choices: %v", p.GetChoices())
+		}
+		if p.GetDefaultValue() != "" {
+			fmt.Printf("\t Default value: %s", p.GetDefaultValue())
+		}
+
+		currVal, err := p.ReadValueNS(ss, owner, app)
+		if err != nil {
+			fmt.Printf("Cannot read current value of parameter %s[%s]/%s: %s", p.GetConfigFile(), p.GetStanza(), p.Name, err.Error())
+		}
+		fmt.Printf("\t Current value: %s", currVal)
+		pVal := AskForInput(p.Name, currVal, p.IsSensitive())
+
+		if pVal != currVal {
+			panic("Not implemented error: setting value of parameter")
+		}
+	}
+
+	return nil
+}
+*/
