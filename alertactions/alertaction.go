@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/prigio/splunk-go-sdk/splunkd"
-	"github.com/prigio/splunk-go-sdk/utils"
-
 	"github.com/mattn/go-isatty"
+
+	"github.com/prigio/splunk-go-sdk/v2/errors"
+	"github.com/prigio/splunk-go-sdk/v2/params"
+	"github.com/prigio/splunk-go-sdk/v2/splunkd"
 )
 
 // isAtTerminal is a boolean which is true if the alert action is being executed on a command-line or not.
@@ -44,10 +45,12 @@ type AlertAction struct {
 	// IconPath is the name of a file within appserver/static/ to be used to represent this alert action
 	IconPath string
 	// params defines the acceptable parameters for the alert
-	params []*Param
+	// this is a slice and not a map, as this is the easiest way to retain the order the parameters were defined
+	params []*params.Param
 	// globalParams is used to track the global parameters necessary for the alert.
 	// "global", in that they are tracked in a dedicate configuration file and are not configured within the alert UI
-	globalParams []*Param
+	// this is a slice and not a map, as this is the easiest way to retain the order the parameters were defined
+	globalParams []*params.Param
 
 	// validateParams is an optional function which can be used to validate the run-time parameters
 	validateParams AlertingFunc
@@ -78,10 +81,10 @@ type AlertAction struct {
 
 func New(stanzaName, label, description, iconPath string) (*AlertAction, error) {
 	if stanzaName == "" {
-		return nil, utils.NewErrInvalidParam("alertAction.New", nil, "'stanzaName' cannot be empty")
+		return nil, errors.NewErrInvalidParam("alertAction.New", nil, "'stanzaName' cannot be empty")
 	}
 	if label == "" {
-		return nil, utils.NewErrInvalidParam("alertAction.New", nil, "'label' cannot be empty")
+		return nil, errors.NewErrInvalidParam("alertAction.New", nil, "'label' cannot be empty")
 	}
 
 	var aa = &AlertAction{
@@ -98,15 +101,20 @@ func (aa *AlertAction) EnableDebug() {
 	aa.debug = true
 }
 
+// IsDebug returns true if debug mode has been activated for the alert action
+func (aa *AlertAction) IsDebug() bool {
+	return aa.debug
+}
+
 // RegisterParam adds a given parameter to the alert action.
-func (aa *AlertAction) RegisterParam(p *Param) error {
+func (aa *AlertAction) RegisterParam(p *params.Param) error {
 	// check if the parameter is already present
 	// return error in case it is already there
-	if _, err := aa.GetParam(p.Name); err == nil {
-		return utils.NewErrInvalidParam("registerParam", nil, "parameter with name '%s' already existing", p.Name)
+	if _, err := aa.GetParam(p.GetName()); err == nil {
+		return errors.NewErrInvalidParam("registerParam["+p.GetName()+"]", nil, "'%s' already exists", p.GetName())
 	}
 	if aa.params == nil {
-		aa.params = make([]*Param, 0, 1)
+		aa.params = make([]*params.Param, 0, 1)
 	}
 	aa.params = append(aa.params, p)
 	return nil
@@ -114,20 +122,22 @@ func (aa *AlertAction) RegisterParam(p *Param) error {
 
 // RegisterNewParam adds a new parameter to the alert action.
 // The argument is additionally returned for further processing, if needed.
-func (aa *AlertAction) RegisterNewParam(name, title, description, defaultValue, placeholder string, uiType ParamType, required bool) (*Param, error) {
-	var p *Param
+func (aa *AlertAction) RegisterNewParam(name, title, description, defaultValue, placeholder, uiType string, required bool) (*params.Param, error) {
+	var p *params.Param
 	var err error
 	// check if the parameter is already present
 	// return error in case it is already there
 	if _, err = aa.GetParam(name); err == nil {
-		return nil, utils.NewErrInvalidParam("registerNewParam", nil, "parameter with name '%s' already existing", name)
+		return nil, errors.NewErrInvalidParam("registerNewPParam["+name+"]", nil, "'%s' already exists", name)
 	}
-	p, err = newParameter("alert_actions.conf", aa.StanzaName, name, title, description, defaultValue, placeholder, uiType, required)
+	p, err = params.NewParam("alert_actions.conf", aa.StanzaName, name, title, description, defaultValue, required, false)
 	if err != nil {
 		return nil, fmt.Errorf("registerNewParam: %w", err)
 	}
+	p.SetCustomProperty("uiType", string(uiType))
+	p.SetCustomProperty("placeholder", placeholder)
 	if aa.params == nil {
-		aa.params = make([]*Param, 0, 1)
+		aa.params = make([]*params.Param, 0, 1)
 	}
 	aa.params = append(aa.params, p)
 	return p, nil
@@ -135,35 +145,35 @@ func (aa *AlertAction) RegisterNewParam(name, title, description, defaultValue, 
 
 // GetParam searches for the param having the provided name.
 // Returns a pointer to the found parameter, or an error if the parameter was not found
-func (aa *AlertAction) GetParam(name string) (*Param, error) {
+func (aa *AlertAction) GetParam(name string) (*params.Param, error) {
 	for _, p := range aa.params {
-		if p.Name == name {
+		if p.GetName() == name {
 			return p, nil
 		}
 	}
-	return nil, fmt.Errorf("parameter not found. name=\"%s\"", name)
+	return nil, fmt.Errorf("getParam[%s]: not found", name)
 }
 
 // GetParamNames returns a list of all the parameters defined for the alert action so far
 func (aa *AlertAction) GetParamNames() []string {
 	var paramsList = make([]string, len(aa.params))
 	for i, p := range aa.params {
-		paramsList[i] = p.Name
+		paramsList[i] = p.GetName()
 	}
 	return paramsList
 }
 
 // RegisterGlobalParam adds a new parameter to the alert action.
 // The argument is additionally returned for further processing, if needed.
-func (aa *AlertAction) RegisterGlobalParam(p *Param) error {
+func (aa *AlertAction) RegisterGlobalParam(p *params.Param) error {
 	// check if the parameter is already present
 	// return error in case it is already there
-	if _, err := aa.GetGlobalParam(p.Name); err == nil {
-		return utils.NewErrInvalidParam("registerGlobalParam", nil, "parameter with name '%s' already existing", p.Name)
+	if _, err := aa.GetGlobalParam(p.GetName()); err == nil {
+		return errors.NewErrInvalidParam("registerGlobalParam["+p.GetName()+"]", nil, "'%s' already exists", p.GetName())
 	}
 
 	if aa.globalParams == nil {
-		aa.globalParams = make([]*Param, 0, 1)
+		aa.globalParams = make([]*params.Param, 0, 1)
 	}
 
 	aa.globalParams = append(aa.globalParams, p)
@@ -172,20 +182,20 @@ func (aa *AlertAction) RegisterGlobalParam(p *Param) error {
 
 // RegisterNewGlobalParam adds a new parameter to the alert action.
 // The argument is additionally returned for further processing, if needed.
-func (aa *AlertAction) RegisterNewGlobalParam(configFile, stanza, name, title, description, defaultValue string, required bool) (*Param, error) {
-	var p *Param
+func (aa *AlertAction) RegisterNewGlobalParam(configFile, stanza, name, title, description, defaultValue string, required bool) (*params.Param, error) {
+	var p *params.Param
 	var err error
 	// check if the parameter is already present
 	// return error in case it is already there
 	if _, err = aa.GetGlobalParam(name); err == nil {
-		return nil, utils.NewErrInvalidParam("registerNewGlobalParam", nil, "parameter with name '%s' already existing", name)
+		return nil, errors.NewErrInvalidParam("registerNewGlobalParam["+name+"]", nil, "'%s' already exists", name)
 	}
-	p, err = newParameter(configFile, stanza, name, title, description, defaultValue, "", 0, required)
+	p, err = params.NewParam(configFile, stanza, name, title, description, defaultValue, required, false)
 	if err != nil {
-		return nil, fmt.Errorf("registerNewGlobalParam: %w", err)
+		return nil, fmt.Errorf("registerNewGlobalParam[%s]: %w", name, err)
 	}
 	if aa.globalParams == nil {
-		aa.globalParams = make([]*Param, 0, 1)
+		aa.globalParams = make([]*params.Param, 0, 1)
 	}
 	aa.globalParams = append(aa.globalParams, p)
 	return p, nil
@@ -193,13 +203,13 @@ func (aa *AlertAction) RegisterNewGlobalParam(configFile, stanza, name, title, d
 
 // GetGlobalParam searches for the global param having the provided name.
 // Returns a pointer to the found parameter, or an error if the parameter was not found
-func (aa *AlertAction) GetGlobalParam(name string) (*Param, error) {
+func (aa *AlertAction) GetGlobalParam(name string) (*params.Param, error) {
 	for _, p := range aa.globalParams {
-		if p.Name == name {
+		if p.GetName() == name {
 			return p, nil
 		}
 	}
-	return nil, fmt.Errorf("getGlobalParam: not found. name=\"%s\"", name)
+	return nil, fmt.Errorf("getGlobalParam[%s]: not found", name)
 }
 
 // GetFirstResults returns the first of the search results which the alert has been invoked on.
@@ -306,7 +316,7 @@ func (aa *AlertAction) setSplunkService() error {
 		return nil
 	}
 	if aa.runtimeConfig == nil {
-		return fmt.Errorf("setSplunkService: no runtime config available. impossible to use it to initialize splunkd client")
+		panic("setSplunkService: no runtime config available. Execute this method after initializing the internal data structures")
 	}
 	// alert actions run locally on splunk servers. It might well be that certificates are self-generated there.
 	ss, err = splunkd.New(aa.runtimeConfig.ServerUri, true, "")
@@ -375,21 +385,21 @@ func (aa *AlertAction) setGlobalParams() error {
 	var err error
 	for _, param := range aa.globalParams {
 		// in case the value of the parameter has been set interactively, skip looking for it within splunk
-		if !param.HasSetValue() {
-			val, err = param.ReadValueNS(aa.splunkd, aa.GetOwner(), aa.GetApp())
+		if !param.HasForcedValue() {
+			val, err = param.GetValueNS(aa.splunkd, aa.GetOwner(), aa.GetApp())
 			if err != nil {
-				return fmt.Errorf("setGlobalParams: cannot retrieve value of global parameter '%s:[%s]/%s' within scope user='%s' app='%s'. %w", param.configFile, param.stanza, param.Name, aa.GetOwner(), aa.GetApp(), err)
+				return fmt.Errorf("setGlobalParams: cannot retrieve value of global parameter '%s' within scope user='%s' app='%s'. %w", param.String(), aa.GetOwner(), aa.GetApp(), err)
 			}
 
-			if val == "" && param.defaultValue == "" && param.required {
-				return fmt.Errorf("setGlobalParams: required parameter cannot have emtpy value '%s:[%s]/%s'", param.configFile, param.stanza, param.Name)
+			if val == "" && param.GetDefaultValue() == "" && param.IsRequired() {
+				return fmt.Errorf("setGlobalParams: required parameter cannot have emtpy value '%s'", param.String())
 			} else if val != "" {
 				loggedVal = val
-				if param.sensitive {
+				if param.IsSensitive() {
 					loggedVal = "***masked***"
 				}
-				aa.Log("INFO", "Setting global parameter %s:[%s]/%s=\"%s\"", param.configFile, param.stanza, param.Name, loggedVal)
-				param.SetValue(val)
+				aa.Log("INFO", "Setting global parameter %s=\"%s\"", param.String(), loggedVal)
+				param.ForceValue(val)
 			}
 		}
 	}
@@ -406,17 +416,17 @@ func (aa *AlertAction) setParams() error {
 	var loggedVal string
 	// assign the actual value to the parameters
 	for _, param := range aa.params {
-		if v, found := aa.runtimeConfig.Configuration[param.Name]; found {
+		if v, found := aa.runtimeConfig.Configuration[param.GetName()]; found {
 			loggedVal = v
-			if param.sensitive {
+			if param.IsSensitive() {
 				loggedVal = "***masked***"
 			}
-			aa.Log("INFO", "Setting parameter %s=\"%s\"", param.Name, loggedVal)
-			if err := param.setValue(v); err != nil {
-				return fmt.Errorf("esetParams: rror while applying run-time configuration: %s", err.Error())
+			aa.Log("INFO", "Setting parameter %s=\"%s\"", param.GetName(), loggedVal)
+			if err := param.ForceValue(v); err != nil {
+				return fmt.Errorf("setParams: error while applying run-time configuration: %s", err.Error())
 			}
 		} else {
-			aa.Log("DEBUG", "Parameter '%s' uses default value \"%s\"", param.Name, param.GetValue())
+			aa.Log("DEBUG", "Parameter '%s' uses default value \"%s\"", param.GetName(), param.GetDefaultValue())
 		}
 	}
 	return nil
@@ -544,7 +554,7 @@ func (aa *AlertAction) Run(args []string, stdin io.Reader, stdout, stderr io.Wri
 	}
 
 	if *getUIHTML {
-		fmt.Println(aa.generateUIHTML())
+		fmt.Println(aa.generateUIXML())
 		actionSelected = true
 	}
 

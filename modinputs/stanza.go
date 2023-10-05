@@ -139,7 +139,7 @@ func (s *Stanza) Interval() (ret string) {
 	return s.Param("interval")
 }
 
-// Param represents a single configuration paramenter: a key-value pair as found within inputs.conf
+// Param represents a single configuration parameter: a key-value pair as found within inputs.conf
 type Param struct {
 	/*
 	   <param name="param">val</param>

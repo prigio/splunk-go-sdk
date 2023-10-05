@@ -1,6 +1,7 @@
 package modinputs
 
 import (
+	"encoding/xml"
 	"fmt"
 	"strings"
 )
@@ -18,8 +19,8 @@ func (mi *ModularInput) generateInputsSpec() string {
 [%s://<name>]
 `, mi.Title, mi.StanzaName)
 
-	for _, arg := range mi.Args {
-		fmt.Fprint(buf, arg.getInputsSpec())
+	for _, p := range mi.params {
+		fmt.Fprint(buf, p.GenerateSpec(""))
 	}
 	return buf.String()
 }
@@ -33,13 +34,11 @@ func (mi *ModularInput) generateExampleConf() string {
 	fmt.Fprintf(&sb, "# %s\n", mi.Description)
 	fmt.Fprintf(&sb, "[%s://name-of-input]\n", mi.StanzaName)
 
-	for _, arg := range mi.Args {
-		fmt.Fprintf(&sb, "# %s - %s\n", arg.Title, arg.Description)
-		if arg.DefaultValue != "" {
-			fmt.Fprintf(&sb, "# Default value: %s\n", arg.DefaultValue)
-		}
-		fmt.Fprintf(&sb, "%s = <%s>\n", arg.Name, arg.DataType)
+	for _, p := range mi.params {
+		fmt.Fprintln(&sb, p.GenerateConf(""))
+		fmt.Fprintf(&sb, "# %s = <%s>\n", p.GetName(), p.GetCustomProperty("dataType"))
 	}
+
 	fmt.Fprint(&sb, "# Standard input configurations\n")
 	fmt.Fprint(&sb, "index = <index>\n")
 	if mi.defaultSourcetype != "" {
@@ -95,8 +94,8 @@ run_introspection = true`)
 #
 `)
 
-	for _, arg := range mi.Args {
-		fmt.Fprintln(buf, arg.getInputsConf())
+	for _, p := range mi.params {
+		fmt.Fprintln(buf, p.GenerateConf(""))
 	}
 
 	return buf.String()
@@ -123,8 +122,8 @@ func (mi *ModularInput) generateDocumentation() string {
 The following describes the parameters which an end user can setup using the inputs UI or the inputs.conf configuration file.
 
 `)
-	for _, par := range mi.Args {
-		fmt.Fprintln(buf, par.GenerateDocumentation())
+	for _, p := range mi.params {
+		fmt.Fprintln(buf, p.GenerateDocumentation())
 	}
 
 	fmt.Fprintf(buf, `
@@ -135,8 +134,8 @@ Global parameters are set by administrators and are valid for all executions of 
 They are set in a custom configuration file and stanza, as described in the following.
 
 `)
-	for _, par := range mi.globalParams {
-		fmt.Fprintln(buf, par.GenerateDocumentation())
+	for _, p := range mi.globalParams {
+		fmt.Fprintln(buf, p.GenerateDocumentation())
 	}
 
 	fmt.Fprintf(buf, `
@@ -252,3 +251,80 @@ func (mi *ModularInput) generateAdHocConfigConfs() string {
 	}
 	return buf.String()
 }
+
+// Utility struct to generate the XML scheme
+// Because XML Marshaling needs all parameters to be public, this is difficult to do within params.Param.
+// Also, this is really modular-inputs specific, so it is better found here.
+type inputArg struct {
+	XMLName xml.Name `xml:"arg"`
+	// Title is the visible name of the parameter, used within the UI
+	Title string `xml:"title"`
+	// Name is the internal name of the parameter, the one actually provided within splunk configurations
+	Name        string `xml:"name,attr"`
+	Description string `xml:"description,omitempty"`
+	DataType    string `xml:"data_type,omitempty"`
+	// validation should be at best be configured through methods
+	Validation       string `xml:"validation,omitempty"`
+	RequiredOnCreate bool   `xml:"required_on_create"`
+	RequiredOnEdit   bool   `xml:"required_on_edit"`
+}
+
+// generateXMLScheme returns a string containing a XML-based description
+// of the configuration parameters accepted by the modular input
+// The XML format is documented at: https://docs.splunk.com/Documentation/Splunk/8.1.2/AdvancedDev/ModInputsScripts#Define_a_scheme_for_introspection
+func (mi *ModularInput) generateXMLScheme() (string, error) {
+	// using the tecnique described at https://riptutorial.com/go/example/14194/marshaling-structs-with-private-fields//
+	// in order to output streaming_mode, which otherwise would have to be publicly exported, which is unwanted.
+	var arg inputArg
+	var args []inputArg = make([]inputArg, 0)
+
+	for _, p := range mi.params {
+		arg = inputArg{
+			Title:            p.GetTitle(),
+			Name:             p.GetName(),
+			Description:      p.GetDescription(),
+			DataType:         p.GetDataType(),
+			Validation:       p.GetCustomProperty("validation"),
+			RequiredOnCreate: p.IsRequired(),
+			RequiredOnEdit:   p.IsRequired(),
+		}
+		args = append(args, arg)
+	}
+
+	if scheme, err := xml.MarshalIndent(struct {
+		XMLName               xml.Name `xml:"scheme"`
+		Title                 string   `xml:"title"`
+		Description           string   `xml:"description"`
+		UseExternalValidation bool     `xml:"use_external_validation"`
+		UseSingleInstance     bool     `xml:"use_single_instance"`
+		//Adding a fixed StreamingMode, not present within the original structure
+		StreamingMode string     `xml:"streaming_mode"`
+		Args          []inputArg `xml:"endpoint>args>arg"`
+	}{
+		Title:                 mi.Title,
+		Description:           mi.Description,
+		UseExternalValidation: mi.useExternalValidation,
+		UseSingleInstance:     mi.useSingleInstance,
+		//Adding a fixed StreamingMode
+		StreamingMode: "xml",
+		Args:          args,
+	}, "", "  "); err != nil {
+		return "", err
+	} else {
+		return string(scheme), nil
+	}
+}
+
+/*
+	arg := InputArg{
+		Title:            title,
+		Description:      description,
+		Name:             name,
+		DefaultValue:     defaultValue,
+		DataType:         dataType,
+		Validation:       validation,
+		RequiredOnCreate: requiredOnCreate,
+		RequiredOnEdit:   requiredOnEdit,
+	}
+
+*/

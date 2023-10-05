@@ -3,7 +3,7 @@ package splunkd
 import (
 	"testing"
 
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/utils"
 )
 
 func TestCollectionList(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/go-querystring/query"
 	"github.com/google/uuid"
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/utils"
 )
 
 func TestUsersList(t *testing.T) {

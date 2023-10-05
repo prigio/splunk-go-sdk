@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/errors"
+	"github.com/prigio/splunk-go-sdk/v2/utils"
 )
 
 const (
@@ -38,7 +39,7 @@ type Client struct {
 
 func New(splunkdUrl string, insecureSkipVerify bool, proxy string) (*Client, error) {
 	if splunkdUrl == "" || (!strings.HasPrefix(splunkdUrl, "https://") && !strings.HasPrefix(splunkdUrl, "http://")) {
-		return nil, &utils.ErrInvalidParam{Context: "splunk service new", Msg: "splunkdUrl must have format http(s)://host:port"}
+		return nil, errors.NewErrInvalidParam("splunk service new", nil, "'splunkdUrl' must have format http(s)://host:port")
 	}
 	ns, _ := NewNamespace("nobody", "search", SplunkSharingApp)
 
@@ -51,7 +52,7 @@ func New(splunkdUrl string, insecureSkipVerify bool, proxy string) (*Client, err
 	if proxy == "" {
 		splunkdUrl, err := url.Parse(splunkdUrl)
 		if err != nil {
-			return nil, &utils.ErrInvalidParam{Context: "splunk service new", Msg: "splunkdUrl", Err: err}
+			return nil, errors.NewErrInvalidParam("splunk service new", err, "'splunkdUrl'")
 		}
 		if err := utils.IsReachable(*splunkdUrl); err != nil {
 			return nil, fmt.Errorf("splunk service new: unreachable splunkd URL '%s'. %w", splunkdUrl, err)

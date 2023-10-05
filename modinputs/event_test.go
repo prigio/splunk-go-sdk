@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/utils"
 )
 
 func TestXML(t *testing.T) {

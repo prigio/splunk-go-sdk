@@ -1,4 +1,4 @@
-module github.com/prigio/splunk-go-sdk
+module github.com/prigio/splunk-go-sdk/v2
 
 go 1.20
 

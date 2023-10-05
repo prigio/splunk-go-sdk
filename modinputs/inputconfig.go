@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/prigio/splunk-go-sdk/splunkd"
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/splunkd"
+	"github.com/prigio/splunk-go-sdk/v2/utils"
 )
 
 /*
@@ -98,17 +98,17 @@ func getInputConfigInteractive(mi *ModularInput) (*inputConfig, error) {
 	// Stanzas hosts the configurations provided to the modular input
 	ic.Stanzas = make([]Stanza, 1)
 	stanza := Stanza{Name: "interactive-input"}
-	stanza.Params = make([]Param, len(mi.Args))
+	stanza.Params = make([]Param, len(mi.params))
 
 	fmt.Println("Interactively provide values for modular input parameters.")
 	var prompt, val string
-	for seq, arg := range mi.Args {
-		prompt = fmt.Sprintf("Provide parameter %s (%s, '%s')", arg.Title, arg.DataType, arg.Name)
-		if arg.Description != "" {
-			prompt = fmt.Sprintf("%s\n    %s\n", prompt, arg.Description)
+	for seq, p := range mi.params {
+		prompt = fmt.Sprintf("Provide parameter %s (%s, '%s')", p.GetTitle(), p.GetDataType(), p.GetName())
+		if p.GetDescription() != "" {
+			prompt = fmt.Sprintf("%s\n    %s\n", prompt, p.GetDescription())
 		}
-		val = utils.AskForInput(prompt, arg.DefaultValue, false)
-		stanza.Params[seq] = Param{Name: arg.Name, Value: val}
+		val = utils.AskForInput(prompt, p.GetDefaultValue(), false)
+		stanza.Params[seq] = Param{Name: p.GetName(), Value: val}
 	}
 
 	ic.Stanzas[0] = stanza

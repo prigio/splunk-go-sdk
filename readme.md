@@ -2,21 +2,23 @@
 
 Reason behind this: sometime you want to deploy python scripts, but there is no python available on the targets (say, a thousand windows servers using the Splunk UF). In those cases, you need to deploy something else. 
 
-Golang is probably the best choice for these use cases as it allows to packate scripts without external library dependencies.
+Golang is probably the best choice for these use cases as it allows to package scripts without external library dependencies.
 
 However, how do you make these scripts talk with Splunk?! Enters this repository. 
 
 This repository provides:
 
 - **a framework & library to build modular inputs** - this is already production grade
+- **a framework & library to build alert actions** - this is already production grade
 - **a (simple) splunkd client** - so that your scripts can perform basic communication with splunkd on port `8089`. **In development**.
-- a custom alerts framework - if needs arises. 
 
 
 ## Documentation
 For detailed documentation, refer to: 
 
-- Modular inputs: [modular inputs libray](modinputs/README.md).
+- Modular inputs: [modinputs package](modinputs/README.md)
+- Alert actions: [alertactions package](alertactions/README.md)
+- Splunkd client: [splunkd package](splunkd/README.md)
 
 ## Usage
 
@@ -43,15 +45,15 @@ Note, as this is a PRIVATE repository, you need to:
 Within your _go_ source files, import the libraries:
 
 ```
-// somesource.go
+// main.go
 package main
 
 import (
 	// ... some other imports
 
-	"github.com/prigio/splunk-go-sdk/modinputs"
+	"github.com/prigio/splunk-go-sdk/v2/modinputs"
     // if needed
-    // "github.com/prigio/splunk-go-sdk/client"
+    // "github.com/prigio/splunk-go-sdk/v2/splunkd"
 )
 // ... your code
 

@@ -2,7 +2,7 @@ package splunkd
 
 import (
 	"github.com/google/go-querystring/query"
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/errors"
 )
 
 // https://docs.splunk.com/Documentation/Splunk/9.1.0/RESTREF/RESTaccess#authentication.2Fusers.2F.7Bname.7D
@@ -42,11 +42,11 @@ func NewUsersCollection(ss *Client) *UsersCollection {
 
 func (col *UsersCollection) CreateUser(name string, details UserResource) (*entry[UserResource], error) {
 	if name == "" {
-		return nil, utils.NewErrInvalidParam(col.name+" createUser", nil, "entryName cannot be empty")
+		return nil, errors.NewErrInvalidParam(col.name+" createUser", nil, "'entryName' cannot be empty")
 	}
 	urlValues, err := query.Values(details)
 	if err != nil {
-		return nil, utils.NewErrInvalidParam(col.name+" createUser", err, "details cannot be converted to url.Values")
+		return nil, errors.NewErrInvalidParam(col.name+" createUser", err, "'details' cannot be converted to url.Values")
 	}
 	return col.Create(name, &urlValues)
 }

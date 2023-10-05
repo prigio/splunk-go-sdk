@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/errors"
 )
 
 // This file provides structs used to parse the JSON-formatted output of the Splunk REST API
@@ -90,13 +90,13 @@ shared - Defaults to false. Set to true to return records for the specified user
 func (e *entry[KVStoreCollResource]) Query(ss *Client, query, fields, sort string, limit, skip int, shared bool, storeJSONResultInto *[]map[string]interface{}) error {
 	ctx := fmt.Sprintf("kvstore[%s] query", e.Name)
 	if ss == nil {
-		return utils.NewErrInvalidParam(ctx, nil, "'splunkService' cannot be nil")
+		return errors.NewErrInvalidParam(ctx, nil, "'splunkService' cannot be nil")
 	}
 	if query == "" {
-		return utils.NewErrInvalidParam(ctx, nil, "'query' cannot be empty. Provide \"{}\" to select all documents")
+		return errors.NewErrInvalidParam(ctx, nil, "'query' cannot be empty. Provide \"{}\" to select all documents")
 	}
 	if storeJSONResultInto == nil {
-		return utils.NewErrInvalidParam(ctx, nil, "'storeJSONResultInto' cannot be nil")
+		return errors.NewErrInvalidParam(ctx, nil, "'storeJSONResultInto' cannot be nil")
 	}
 
 	dataURL := strings.ReplaceAll(e.Links.List, "/collections/config/", "/collections/data/")
@@ -120,10 +120,10 @@ func (e *entry[KVStoreCollResource]) Query(ss *Client, query, fields, sort strin
 func (e *entry[KVStoreCollResource]) Insert(ss *Client, jsondata string) (key string, err error) {
 	ctx := fmt.Sprintf("kvstore[%s] insert", e.Name)
 	if ss == nil {
-		return "", utils.NewErrInvalidParam(ctx, nil, "'splunkService' cannot be nil")
+		return "", errors.NewErrInvalidParam(ctx, nil, "'splunkService' cannot be nil")
 	}
 	if jsondata == "" {
-		return "", utils.NewErrInvalidParam(ctx, nil, "'jsondata' cannot be empty")
+		return "", errors.NewErrInvalidParam(ctx, nil, "'jsondata' cannot be empty")
 	}
 	dataURL := strings.ReplaceAll(e.Links.List, "/collections/config/", "/collections/data/")
 	dataRes := make(map[string]string, 0)

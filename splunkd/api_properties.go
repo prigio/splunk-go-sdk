@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/errors"
 )
 
 // This file provides structs used to parse the JSON-formatted output of the Splunk REST API
@@ -70,7 +70,7 @@ func NewPropertiesCollectionNS(ss *Client, configFileName, owner, app string) *P
 
 func (col *PropertiesCollection) GetStanza(name string) (map[string]string, error) {
 	if name == "" {
-		return nil, utils.NewErrInvalidParam(col.name+" getStanza", nil, "name cannot be empty")
+		return nil, errors.NewErrInvalidParam(col.name+" getStanza", nil, "name cannot be empty")
 	}
 	tmpCol := collection[PropertyResource]{splunkd: col.splunkd, name: col.name + "/" + name, path: col.path + "/" + name}
 	entries, err := tmpCol.List()
@@ -91,7 +91,7 @@ func (col *PropertiesCollection) Create(name string, properties *url.Values) err
 func (col *PropertiesCollection) CreateStanza(name string, properties *url.Values) error {
 	// https://docs.splunk.com/Documentation/Splunk/9.1.1/RESTREF/RESTconf#properties
 	if name == "" {
-		return utils.NewErrInvalidParam(col.name+" createStanza", nil, "name cannot be empty")
+		return errors.NewErrInvalidParam(col.name+" createStanza", nil, "'name' cannot be empty")
 	}
 	//var discard *discardBody
 	var params url.Values = url.Values{}
@@ -105,7 +105,7 @@ func (col *PropertiesCollection) CreateStanza(name string, properties *url.Value
 func (col *PropertiesCollection) DeleteStanza(stanza string) error {
 	// https://docs.splunk.com/Documentation/Splunk/9.1.1/RESTREF/RESTconf#properties
 	if stanza == "" {
-		return utils.NewErrInvalidParam(col.name+" deleteProperty", nil, "stanza cannot be empty")
+		return errors.NewErrInvalidParam(col.name+" deleteProperty", nil, "'stanza' cannot be empty")
 	}
 
 	if err := doSplunkdHttpRequest(col.splunkd, "DELETE", getUrl(col.path, stanza), nil, nil, "", &discardBody{}); err != nil {
@@ -117,7 +117,7 @@ func (col *PropertiesCollection) DeleteStanza(stanza string) error {
 func (col *PropertiesCollection) SetProperties(stanza string, properties *url.Values) error {
 	// https://docs.splunk.com/Documentation/Splunk/9.1.1/RESTREF/RESTconf#properties
 	if stanza == "" {
-		return utils.NewErrInvalidParam(col.name+" setProperties", nil, "stanza cannot be empty")
+		return errors.NewErrInvalidParam(col.name+" setProperties", nil, "stanza cannot be empty")
 	}
 
 	if properties == nil || len(*properties) == 0 {
@@ -132,10 +132,10 @@ func (col *PropertiesCollection) SetProperties(stanza string, properties *url.Va
 func (col *PropertiesCollection) SetProperty(stanza, propertyName, value string) error {
 	// https://docs.splunk.com/Documentation/Splunk/9.1.1/RESTREF/RESTconf#properties
 	if stanza == "" {
-		return utils.NewErrInvalidParam(col.name+" setProperty", nil, "stanza cannot be empty")
+		return errors.NewErrInvalidParam(col.name+" setProperty", nil, "stanza cannot be empty")
 	}
 	if propertyName == "" {
-		return utils.NewErrInvalidParam(col.name+" setProperty", nil, "propertyName cannot be empty")
+		return errors.NewErrInvalidParam(col.name+" setProperty", nil, "propertyName cannot be empty")
 	}
 
 	var params url.Values = url.Values{}
@@ -148,10 +148,10 @@ func (col *PropertiesCollection) SetProperty(stanza, propertyName, value string)
 
 func (col *PropertiesCollection) GetProperty(stanza, propertyName string) (string, error) {
 	if stanza == "" {
-		return "", utils.NewErrInvalidParam(col.name+" getProperty", nil, "stanza cannot be empty")
+		return "", errors.NewErrInvalidParam(col.name+" getProperty", nil, "stanza cannot be empty")
 	}
 	if propertyName == "" {
-		return "", utils.NewErrInvalidParam(col.name+" getProperty", nil, "propertyName cannot be empty")
+		return "", errors.NewErrInvalidParam(col.name+" getProperty", nil, "propertyName cannot be empty")
 	}
 	props, err := col.GetStanza(stanza)
 	if err != nil {

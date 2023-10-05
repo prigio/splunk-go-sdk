@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/errors"
 )
 
 // pathLogin represents this enpoint https://docs.splunk.com/Documentation/Splunk/8.1.3/RESTREF/RESTaccess#auth.2Flogin
@@ -26,10 +26,10 @@ type LoginResponse struct {
 
 func (ss *Client) Login(username, password, passcode2FA string) error {
 	if username == "" {
-		return utils.NewErrInvalidParam("login", nil, "'username' cannot be empty")
+		return errors.NewErrInvalidParam("login", nil, "'username' cannot be empty")
 	}
 	if password == "" {
-		return utils.NewErrInvalidParam("login", nil, "'password' cannot be empty")
+		return errors.NewErrInvalidParam("login", nil, "'password' cannot be empty")
 	}
 
 	var err error
@@ -61,7 +61,7 @@ func (ss *Client) Login(username, password, passcode2FA string) error {
 
 func (ss *Client) LoginWithToken(authToken string) error {
 	if authToken == "" {
-		return utils.NewErrInvalidParam("loginWithToken", nil, "'authToken' cannot be empty")
+		return errors.NewErrInvalidParam("loginWithToken", nil, "'authToken' cannot be empty")
 	}
 	ss.authToken = authToken
 	if _, err := ss.AuthContext(); err != nil {
@@ -72,7 +72,7 @@ func (ss *Client) LoginWithToken(authToken string) error {
 
 func (ss *Client) LoginWithSessionKey(sessionKey string) error {
 	if sessionKey == "" {
-		return utils.NewErrInvalidParam("loginWithSessionKey", nil, "'sessionKey' cannot be empty")
+		return errors.NewErrInvalidParam("loginWithSessionKey", nil, "'sessionKey' cannot be empty")
 	}
 	ss.sessionKey = sessionKey
 	if _, err := ss.AuthContext(); err != nil {

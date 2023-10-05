@@ -1,4 +1,4 @@
-Library `github.com/prigio/splunk-go-sdk/modinputs`
+Library `github.com/prigio/splunk-go-sdk/v2/modinputs`
 =====================================================
 
 Offered functionality

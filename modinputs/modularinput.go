@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mattn/go-isatty"
-	"github.com/prigio/splunk-go-sdk/alertactions"
-	"github.com/prigio/splunk-go-sdk/splunkd"
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/errors"
+	"github.com/prigio/splunk-go-sdk/v2/params"
+	"github.com/prigio/splunk-go-sdk/v2/splunkd"
 )
 
 // isAtTerminal is a boolean which is true if the alert action is being executed on a command-line or not.
@@ -47,11 +47,10 @@ type ModularInput struct {
 
 	useExternalValidation bool
 	useSingleInstance     bool
-	Args                  []InputArg
-
+	params                []*params.Param
 	// globalParams is used to track the global parameters necessary for the alert.
 	// "global", in that they are tracked in a dedicate configuration file and are not configured within the alert UI
-	globalParams []*alertactions.Param
+	globalParams []*params.Param
 
 	// (optional) function used to validate data. Expected only if the modular input is configured to use "external validation"
 	validate ValidationFunc
@@ -69,10 +68,11 @@ type ModularInput struct {
 	// This is used in case no index has been configured within local/inputs.conf
 	defaultIndex string
 
-	stdin  io.Reader
-	stdout io.Writer
-	stderr io.Writer
-
+	/*
+		stdin  io.Reader
+		stdout io.Writer
+		stderr io.Writer
+	*/
 	// These parameters are read-in from the XML-based configurations provided on stdin by splunk upon execution
 	splunkd       *splunkd.Client
 	hostname      string
@@ -90,10 +90,10 @@ type ModularInput struct {
 
 func New(stanzaName, label, description string) (*ModularInput, error) {
 	if stanzaName == "" {
-		return nil, utils.NewErrInvalidParam("modularInput.New", nil, "'stanzaName' cannot be empty")
+		return nil, errors.NewErrInvalidParam("modularInput.New", nil, "'stanzaName' cannot be empty")
 	}
 	if label == "" {
-		return nil, utils.NewErrInvalidParam("modularInput.New", nil, "'label' cannot be empty")
+		return nil, errors.NewErrInvalidParam("modularInput.New", nil, "'label' cannot be empty")
 	}
 
 	var mi = &ModularInput{
@@ -102,7 +102,6 @@ func New(stanzaName, label, description string) (*ModularInput, error) {
 		Description:       description,
 		defaultSourcetype: stanzaName,
 		runID:             uuid.New().String()[0:8],
-		Args:              make([]InputArg, 0),
 	}
 	return mi, nil
 }
@@ -191,52 +190,68 @@ func (mi *ModularInput) setSplunkService() error {
 	return nil
 }
 
-// RegisterNewParam adds a NEW argument to the modular input.
+// RegisterNewParam adds a new parameter to the alert action.
 // The argument is additionally returned for further processing, if needed.
-func (mi *ModularInput) RegisterNewParam(name, title, description, defaultValue, dataType, validation string, requiredOnCreate, requiredOnEdit bool) (*InputArg, error) {
-	if name == "" {
-		return nil, fmt.Errorf("invalid modular input argument defined: 'name' cannot be empty")
+//
+// The following are the only adminissible values for the dataType. Anything else will generate an error.
+// - "string"
+// - "boolean"
+// - "number"
+func (mi *ModularInput) RegisterNewParam(name, title, description, defaultValue, dataType, validation string, required, sensitive bool) (*params.Param, error) {
+	var (
+		p   *params.Param
+		err error
+	)
+	// check if the parameter is already present
+	// return error in case it is already there
+	if _, err = mi.GetParam(name); err == nil {
+		return nil, errors.NewErrInvalidParam("registerNewParam["+name+"]", nil, "'%s' already exists", name)
 	}
-	if title == "" {
-		return nil, fmt.Errorf("invalid modular input argument defined: 'title' cannot be empty")
+	p, err = params.NewParam("inputs.conf", mi.StanzaName, name, title, description, defaultValue, required, sensitive)
+	if err != nil {
+		return nil, fmt.Errorf("registerNewParam: %w", err)
 	}
-	if dataType != ArgDataTypeStr && dataType != ArgDataTypeBool && dataType != ArgDataTypeNumber {
-		return nil, fmt.Errorf("invalid modular input argument defined: 'dataType' provided '%s', expected one of '%s/%s/%s'", dataType, ArgDataTypeStr, ArgDataTypeBool, ArgDataTypeNumber)
+	err = p.SetDataType(dataType)
+	if err != nil {
+		return nil, errors.NewErrInvalidParam("registerNewParam["+name+"]", err, `'dataType' provided="%s"`, dataType)
 	}
-	if mi.Args == nil {
-		mi.Args = make([]InputArg, 0, 1)
+	if validation != "" {
+		p.SetCustomProperty("validation", validation)
 	}
-	arg := InputArg{
-		Title:            title,
-		Description:      description,
-		Name:             name,
-		DefaultValue:     defaultValue,
-		DataType:         dataType,
-		Validation:       validation,
-		RequiredOnCreate: requiredOnCreate,
-		RequiredOnEdit:   requiredOnEdit,
+	if mi.params == nil {
+		mi.params = make([]*params.Param, 0, 1)
 	}
+	mi.params = append(mi.params, p)
+	return p, nil
+}
 
-	mi.Args = append(mi.Args, arg)
-	return &arg, nil
+// GetParam searches for the param having the provided name.
+// Returns a pointer to the found parameter, or an error if the parameter was not found
+func (mi *ModularInput) GetParam(name string) (*params.Param, error) {
+	for _, p := range mi.params {
+		if p.GetName() == name {
+			return p, nil
+		}
+	}
+	return nil, fmt.Errorf("getParam[%s]: not found", name)
 }
 
 // RegisterNewGlobalParam adds a new parameter to the alert action.
 // The argument is additionally returned for further processing, if needed.
-func (mi *ModularInput) RegisterNewGlobalParam(configFile, stanza, name, title, description, defaultValue string, required bool) (*alertactions.Param, error) {
-	var p *alertactions.Param
+func (mi *ModularInput) RegisterNewGlobalParam(configFile, stanza, name, title, description, defaultValue string, required, sensitive bool) (*params.Param, error) {
+	var p *params.Param
 	var err error
 	// check if the parameter is already present
 	// return error in case it is already there
 	if _, err = mi.GetGlobalParam(name); err == nil {
-		return nil, utils.NewErrInvalidParam("registerNewGlobalParam", nil, "parameter with name '%s' already existing", name)
+		return nil, errors.NewErrInvalidParam("registerNewGlobalParam["+name+"]", nil, "'%s' already exists", name)
 	}
-	p, err = alertactions.NewGlobalParam(configFile, stanza, name, title, description, defaultValue, required)
+	p, err = params.NewParam(configFile, stanza, name, title, description, defaultValue, required, sensitive)
 	if err != nil {
-		return nil, fmt.Errorf("registerNewGlobalParam: %w", err)
+		return nil, fmt.Errorf("registerNewGlobalParam[%s]: %w", name, err)
 	}
 	if mi.globalParams == nil {
-		mi.globalParams = make([]*alertactions.Param, 0, 1)
+		mi.globalParams = make([]*params.Param, 0, 1)
 	}
 	mi.globalParams = append(mi.globalParams, p)
 	return p, nil
@@ -244,14 +259,13 @@ func (mi *ModularInput) RegisterNewGlobalParam(configFile, stanza, name, title, 
 
 // GetGlobalParam searches for the global param having the provided name.
 // Returns a pointer to the found parameter, or an error if the parameter was not found
-func (aa *ModularInput) GetGlobalParam(name string) (*alertactions.Param, error) {
+func (aa *ModularInput) GetGlobalParam(name string) (*params.Param, error) {
 	for _, p := range aa.globalParams {
-		if p.Name == name {
+		if p.GetName() == name {
 			return p, nil
 		}
 	}
-
-	return nil, fmt.Errorf("getGlobalParam: not found. name=\"%s\"", name)
+	return nil, fmt.Errorf(`getGlobalParam[%s]: parameter not found`, name)
 }
 
 func (mi *ModularInput) RegisterValidationFunc(f ValidationFunc) {
@@ -383,61 +397,6 @@ func (mi *ModularInput) NewDefaultEvent(stanza *Stanza) (ev *SplunkEvent) {
 	return ev
 }
 
-/*
-// generateInputsSpec returns a string which can be used to define the alert action within the splunk configuration file README/inputs.conf.spec
-func (mi *ModularInput) generateInputsSpec() string {
-	buf := new(strings.Builder)
-	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
-	buf.Grow(512)
-
-	fmt.Fprintf(buf, `**
-** Configurations for modular input '%s' within README/inputs.conf.spec
-** These configurations have been auto-generated
-**
-[%s]
-`, mi.Title, mi.StanzaName)
-
-	for _, arg := range mi.Args {
-		fmt.Fprint(buf, arg.getInputsSpec())
-	}
-	return buf.String()
-}
-
-// generateAlertActionsConf returns a string which can be used to define the alert action within the splunk configuration file default/alert_actions.conf
-func (mi *ModularInput) generateInputsConf() string {
-	buf := new(strings.Builder)
-	// pre-growing the buffer to 512 bytes: this avoids doing this continuously when executing buf.WriteString()
-	buf.Grow(512)
-
-	fmt.Fprintf(buf, `
-## Configurations for modular input '%s' within default/inputs.conf
-## These configurations have been auto-generated
-##
-## See: https://docs.splunk.com/Documentation/Splunk/latest/Admin/Inputsconf
-[%s]
-# %s
-# %s
-#
-`, mi.Title, mi.StanzaName, mi.Title, mi.Description)
-
-	if mi.defaultSourcetype != "" {
-		fmt.Fprintf(buf, "sourcetype = %s\n", mi.defaultSourcetype)
-	}
-
-	fmt.Fprint(buf, `
-# Parameters specific for this modular input
-#   these can be autogenerated by starting the input from the command line.
-#
-`)
-
-	for _, arg := range mi.Args {
-		fmt.Fprintln(buf, arg.getInputsConf())
-	}
-
-	return buf.String()
-}
-*/
-
 // printHelp prints command-line usage instructions to STDOUT
 func (mi *ModularInput) printHelp() {
 	fmt.Printf("Usage for custom modular input '%s'\n", mi.StanzaName)
@@ -495,7 +454,7 @@ func (mi *ModularInput) Run(args []string, stdin io.Reader, stdout, stderr io.Wr
 	} else if *schemePtr {
 		// print a XML definition of the parameters accepted by this modular input
 		mi.Log("DEBUG", "starting --scheme action")
-		if schemeXml, err := mi.getXMLScheme(); err != nil {
+		if schemeXml, err := mi.generateXMLScheme(); err != nil {
 			mi.Log("FATAL", "Error during scheme generation. %s", err.Error())
 			return err
 		} else {
@@ -706,34 +665,4 @@ func (mi *ModularInput) getLoggingSourcetype() string {
 		return mi.internalLogEvent.SourceType
 	}
 	return "modinput:" + mi.defaultSourcetype
-}
-
-// getXMLScheme returns a string containing a XML-based description
-// of the configuration parameters accepted by the modular input
-// The XML format is documented at: https://docs.splunk.com/Documentation/Splunk/8.1.2/AdvancedDev/ModInputsScripts#Define_a_scheme_for_introspection
-func (mi *ModularInput) getXMLScheme() (string, error) {
-	// using the tecnique described at https://riptutorial.com/go/example/14194/marshaling-structs-with-private-fields//
-	// in order to output streaming_mode, which otherwise would have to be publicly exported, which is unwanted.
-	if scheme, err := xml.MarshalIndent(struct {
-		XMLName               xml.Name `xml:"scheme"`
-		Title                 string   `xml:"title"`
-		Description           string   `xml:"description"`
-		UseExternalValidation bool     `xml:"use_external_validation"`
-		UseSingleInstance     bool     `xml:"use_single_instance"`
-		//Adding a fixed StreamingMode, not present within the original structure
-		StreamingMode string     `xml:"streaming_mode"`
-		Args          []InputArg `xml:"endpoint>args>arg"`
-	}{
-		Title:                 mi.Title,
-		Description:           mi.Description,
-		UseExternalValidation: mi.useExternalValidation,
-		UseSingleInstance:     mi.useSingleInstance,
-		//Adding a fixed StreamingMode
-		StreamingMode: "xml",
-		Args:          mi.Args,
-	}, "", "  "); err != nil {
-		return "", err
-	} else {
-		return string(scheme), nil
-	}
 }

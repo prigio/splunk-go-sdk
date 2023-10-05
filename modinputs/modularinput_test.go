@@ -6,6 +6,8 @@ import (
 )
 
 func TestAddArgument(t *testing.T) {
+	var err error
+
 	mi := &ModularInput{}
 
 	cases := []struct {
@@ -18,23 +20,27 @@ func TestAddArgument(t *testing.T) {
 		requiredOnCreate bool
 		requireOnEdit    bool
 	}{
-		{"param1", "Param1", "A string parameter", "", ArgDataTypeStr, "", true, false},
-		{"param2", "Param2", "A numeric parameter", "", ArgDataTypeNumber, "", true, true},
+		{"param1", "Param1", "A string parameter", "", "string", "", true, true},
+		{"param2", "Param2", "A numeric parameter", "", "number", "", true, true},
 	}
 
 	for i, v := range cases {
-		mi.RegisterNewParam(v.name, v.title, v.description, v.dataType, v.defaultValue, v.validation, v.requiredOnCreate, v.requireOnEdit)
-		if len(mi.Args) != i+1 {
+		_, err = mi.RegisterNewParam(v.name, v.title, v.description, v.defaultValue, v.dataType, v.validation, v.requiredOnCreate, false)
+		if err != nil {
+			t.Error(err.Error())
+			t.FailNow()
+		}
+		if len(mi.params) != i+1 {
 			t.Errorf("Argument %s not added", v.name)
 		}
-		if mi.Args[i].Name != v.name {
-			t.Errorf(`Wrong name added: expected="%s", got="%s"`, v.name, mi.Args[i].Name)
+		if mi.params[i].GetName() != v.name {
+			t.Errorf(`Wrong name added: expected="%s", got="%s"`, v.name, mi.params[i].GetName())
 		}
-		if mi.Args[i].Title != v.title {
-			t.Errorf(`Wrong title added: expected="%s", got="%s"`, v.title, mi.Args[i].Title)
+		if mi.params[i].GetTitle() != v.title {
+			t.Errorf(`Wrong title added: expected="%s", got="%s"`, v.title, mi.params[i].GetTitle())
 		}
-		if mi.Args[i].Description != v.description {
-			t.Errorf(`Wrong description added: expected="%s", got="%s"`, v.description, mi.Args[i].Description)
+		if mi.params[i].GetDescription() != v.description {
+			t.Errorf(`Wrong description added: expected="%s", got="%s"`, v.description, mi.params[i].GetDescription())
 		}
 	}
 }
@@ -46,7 +52,7 @@ func TestSchemeXML(t *testing.T) {
 		useExternalValidation: false,
 		useSingleInstance:     false,
 	}
-	mi.RegisterNewParam("one", "Param one", "Test parameter one, of string type, without validation", "", ArgDataTypeStr, "", true, true)
+	mi.RegisterNewParam("one", "Param one", "Test parameter one, of string type, without validation", "", "string", "", true, false)
 
 	// when modifying this, you need to pay attention that the editor
 	// may want to substitute spaces with tabs, thus causing tests to fail.
@@ -67,9 +73,9 @@ func TestSchemeXML(t *testing.T) {
       </arg>
     </args>
   </endpoint>
-</scheme>`, mi.Title, mi.Description, mi.Args[0].Name, mi.Args[0].Title, mi.Args[0].Description, mi.Args[0].DataType)
+</scheme>`, mi.Title, mi.Description, mi.params[0].GetName(), mi.params[0].GetTitle(), mi.params[0].GetDescription(), mi.params[0].GetDataType())
 
-	generatedScheme, _ := mi.getXMLScheme()
+	generatedScheme, _ := mi.generateXMLScheme()
 
 	if string(generatedScheme) != expectedScheme {
 		t.Errorf("PrintXMLScheme() did not return the expacted value.\n## Expected=\n'%s'\n ## Generated:\n'%s'\n", expectedScheme, string(generatedScheme))

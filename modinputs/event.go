@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/utils"
 )
 
 // SplunkEvent is structure used to feed log data to splunk using the XML streaming mode.

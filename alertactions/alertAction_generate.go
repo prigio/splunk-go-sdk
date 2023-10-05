@@ -12,8 +12,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/prigio/splunk-go-sdk/splunkd"
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/splunkd"
+	"github.com/prigio/splunk-go-sdk/v2/utils"
 )
 
 func (aa *AlertAction) generateRuntimeConfig(filename string) string {
@@ -54,9 +54,14 @@ action.%s = [0|1]
 	return buf.String()
 }
 
-// generateUIHTML returns a string which can be used to configure the UI for the alert action within the splunk configuration file default/data/ui/alerts/<stanzaname>.html
-func (aa *AlertAction) generateUIHTML() string {
-	buf := new(strings.Builder)
+// generateUIXML returns a string which can be used to configure the UI for the alert action within the splunk configuration file default/data/ui/alerts/<stanzaname>.html
+func (aa *AlertAction) generateUIXML() string {
+	var (
+		err  error
+		buf  *strings.Builder
+		html string
+	)
+	buf = new(strings.Builder)
 	buf.Grow(512)
 	fmt.Fprintf(buf, `<!-- 
 Template for UI configuration. This has been automatically generated
@@ -76,7 +81,13 @@ Documentation for this file is at:
 `, aa.StanzaName)
 
 	for _, par := range aa.params {
-		fmt.Fprintln(buf, par.getUIHTML(aa.StanzaName))
+		// retrieve the UI type of the parameter from the custom properties of the parameter itself
+		html, err = par.GenerateUIXML(aa.StanzaName, par.GetCustomProperty("uiType"))
+		if err != nil {
+			aa.Log("ERROR", "Cannot generate UI HTML for parameter '%s'. %s", par.GetName(), err)
+		} else {
+			fmt.Fprintln(buf, html)
+		}
 	}
 
 	fmt.Fprintln(buf, "</form>")
@@ -154,7 +165,7 @@ forceCsvResults = true
 # in this stanza starts with "sendalert" or contains the string "$results.file$".
 # Default: auto
 
-maxtime = 1h
+maxtime = 5m
 # The maximum amount of time that the execution of an action is allowed to take before the action is aborted.
 # Format: <integer>[m|s|h|d]
 
@@ -318,8 +329,8 @@ func (aa *AlertAction) getAlertConfigInteractive() (*alertConfig, error) {
 		resp := utils.AskForInput("Do you want to specify global parameters manually (y), or get their value from splunk (n)", "n", false)
 		if strings.ToLower(resp) == "y" {
 			for _, p := range aa.globalParams {
-				pVal := utils.AskForInput(p.Title, p.defaultValue, p.IsSensitive())
-				p.SetValue(pVal)
+				pVal := utils.AskForInput(p.GetTitle(), p.GetDefaultValue(), p.IsSensitive())
+				p.ForceValue(pVal)
 			}
 		}
 	}
@@ -327,7 +338,7 @@ func (aa *AlertAction) getAlertConfigInteractive() (*alertConfig, error) {
 	fmt.Println("> Interactively provide values for alert action parameters.")
 	ic.Configuration = make(map[string]string)
 	for _, p := range aa.params {
-		ic.Configuration[p.Name] = utils.AskForInput(p.Title, p.defaultValue, p.IsSensitive())
+		ic.Configuration[p.GetName()] = utils.AskForInput(p.GetTitle(), p.GetDefaultValue(), p.IsSensitive())
 	}
 
 	return ic, nil
@@ -380,18 +391,18 @@ func (aa *AlertAction) generateAdHocConfigConfs() string {
 	var paramsByFileAndStanza map[string]map[string][]string = make(map[string]map[string][]string)
 
 	for _, p := range aa.globalParams {
-		confFile := p.configFile
+		confFile := p.GetConfigFile()
 		if !strings.HasSuffix(confFile, ".conf") {
 			confFile = confFile + ".conf"
 		}
 		if _, found := paramsByFileAndStanza[confFile]; !found {
 			paramsByFileAndStanza[confFile] = make(map[string][]string)
-			paramsByFileAndStanza[confFile][p.stanza] = make([]string, 0)
+			paramsByFileAndStanza[confFile][p.GetStanza()] = make([]string, 0)
 		}
-		if _, found := paramsByFileAndStanza[confFile][p.stanza]; !found {
-			paramsByFileAndStanza[confFile][p.stanza] = make([]string, 0)
+		if _, found := paramsByFileAndStanza[confFile][p.GetStanza()]; !found {
+			paramsByFileAndStanza[confFile][p.GetStanza()] = make([]string, 0)
 		}
-		paramsByFileAndStanza[confFile][p.stanza] = append(paramsByFileAndStanza[confFile][p.stanza], p.GenerateConf(""))
+		paramsByFileAndStanza[confFile][p.GetStanza()] = append(paramsByFileAndStanza[confFile][p.GetStanza()], p.GenerateConf(""))
 	}
 
 	buf := new(strings.Builder)

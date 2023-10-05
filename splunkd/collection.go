@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/errors"
 )
 
 // collection represents a collection of entries regarding an API endpoint
@@ -42,10 +42,10 @@ func (col *collection[T]) Create(entryName string, params *url.Values) (*entry[T
 		return nil, fmt.Errorf("create: %w", err)
 	}
 	if entryName == "" {
-		return nil, utils.NewErrInvalidParam(col.name+" create", nil, "entryName cannot be empty")
+		return nil, errors.NewErrInvalidParam(col.name+" create", nil, "entryName cannot be empty")
 	}
 	if params == nil || len(*params) == 0 {
-		return nil, utils.NewErrInvalidParam(col.name+" create", nil, "params for '%s' cannot be empty", entryName)
+		return nil, errors.NewErrInvalidParam(col.name+" create", nil, "params for '%s' cannot be empty", entryName)
 	}
 
 	fullUrl := getUrl(col.path, "")
@@ -134,13 +134,13 @@ func (col *collection[T]) CreateNS(ns *Namespace, entryName string, params *url.
 		return nil, fmt.Errorf("createNS: %w", err)
 	}
 	if entryName == "" {
-		return nil, utils.NewErrInvalidParam(col.name+" createNS", nil, "entryName cannot be empty")
+		return nil, errors.NewErrInvalidParam(col.name+" createNS", nil, "entryName cannot be empty")
 	}
 	if params == nil || len(*params) == 0 {
-		return nil, utils.NewErrInvalidParam(col.name+" createNS", nil, "params for '%s' cannot be empty", entryName)
+		return nil, errors.NewErrInvalidParam(col.name+" createNS", nil, "params for '%s' cannot be empty", entryName)
 	}
 	if ns == nil {
-		return nil, utils.NewErrInvalidParam(col.name+" createNS", nil, "namespace for '%s' cannot be nil", entryName)
+		return nil, errors.NewErrInvalidParam(col.name+" createNS", nil, "namespace for '%s' cannot be nil", entryName)
 	}
 
 	var fullUrl string
@@ -166,10 +166,10 @@ func (col *collection[T]) Update(entryName string, params *url.Values) error {
 		return fmt.Errorf("update: %w", err)
 	}
 	if entryName == "" {
-		return utils.NewErrInvalidParam(col.name+" update", nil, "entryName cannot be empty")
+		return errors.NewErrInvalidParam(col.name+" update", nil, "entryName cannot be empty")
 	}
 	if params == nil || len(*params) == 0 {
-		return utils.NewErrInvalidParam(col.name+" update", nil, "params for '%s' cannot be empty", entryName)
+		return errors.NewErrInvalidParam(col.name+" update", nil, "params for '%s' cannot be empty", entryName)
 	}
 
 	fullUrl := getUrl(col.path, entryName)
@@ -185,7 +185,7 @@ func (col *collection[T]) Delete(entryName string) error {
 		return fmt.Errorf("delete: %w", err)
 	}
 	if entryName == "" {
-		return utils.NewErrInvalidParam(col.name+" delete", nil, "entryName cannot be empty")
+		return errors.NewErrInvalidParam(col.name+" delete", nil, "entryName cannot be empty")
 	}
 
 	fullUrl := getUrl(col.path, entryName)
@@ -212,7 +212,7 @@ func (col *collection[T]) UpdateACL(entryName string, acl AccessControlList) err
 		return fmt.Errorf("updateACL: %w", err)
 	}
 	if entryName == "" {
-		return utils.NewErrInvalidParam(col.name+" UpdateACL", nil, "entryName cannot be empty")
+		return errors.NewErrInvalidParam(col.name+" UpdateACL", nil, "entryName cannot be empty")
 	}
 
 	fullUrl := getUrl(col.path, entryName) + "/acl"

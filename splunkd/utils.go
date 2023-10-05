@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/prigio/splunk-go-sdk/utils"
+	"github.com/prigio/splunk-go-sdk/v2/errors"
 )
 
 // discardBody is used as a "nil" type by doSplunkdHttpRequest() for the parseJSONResultInto argument
@@ -20,14 +20,14 @@ type discardBody struct{}
 // doSplunkdHttpRequest executes the specified request and returns http code, the body contents and possibly an error
 func doSplunkdHttpRequest[T any](ss *Client, method, urlPath string, urlParams *url.Values, body []byte, contentType string, parseJSONResultInto *T) (err error) {
 	if ss == nil {
-		return utils.NewErrInvalidParam("doSplunkdHttpRequest", nil, "'splunkService' cannot be nil")
+		return errors.NewErrInvalidParam("doSplunkdHttpRequest", nil, "'splunkService' cannot be nil")
 	}
 	method = strings.ToUpper(method)
 	if method != "GET" && method != "POST" && method != "DELETE" && method != "PUT" && method != "HEAD" {
-		return utils.NewErrInvalidParam("doSplunkdHttpRequest", nil, "'method' must be one of GET, POST, DELETE, PUT, HEAD. provided:'%s'", method)
+		return errors.NewErrInvalidParam("doSplunkdHttpRequest", nil, "'method' must be one of GET, POST, DELETE, PUT, HEAD. provided:'%s'", method)
 	}
 	if urlPath == "" {
-		return utils.NewErrInvalidParam("doSplunkdHttpRequest", nil, "'urlPath' cannot be empty")
+		return errors.NewErrInvalidParam("doSplunkdHttpRequest", nil, "'urlPath' cannot be empty")
 	}
 
 	var fullUrl string
