@@ -294,7 +294,7 @@ func (aa *AlertAction) GetNamespace() (*splunkd.Namespace, error) {
 }
 
 // setSplunkService configures the splunkd client
-// Prerequisites to execution: a runtime configuration must be already available (aa.setConfig()) when performing this method.
+// Prerequisites to execution: a runtime configuration must be already available (aa.initRuntime()) when performing this method.
 // The client has already been authenticated using the sessionKey which Splunk provides when starting the alert.
 func (aa *AlertAction) setSplunkService() error {
 	var (
@@ -310,9 +310,12 @@ func (aa *AlertAction) setSplunkService() error {
 	}
 	// alert actions run locally on splunk servers. It might well be that certificates are self-generated there.
 	ss, err = splunkd.New(aa.runtimeConfig.ServerUri, true, "")
+	if err != nil {
+		return fmt.Errorf("setSplunkService: cannot create splunkd service. %w", err)
+	}
 	ss.SetNamespace(aa.GetOwner(), aa.GetApp(), splunkd.SplunkSharingGlobal)
 	if err != nil {
-		return fmt.Errorf("setSplunkService: %w", err)
+		return fmt.Errorf("setSplunkService: cannot set namespace. %w", err)
 	}
 
 	if err = ss.LoginWithSessionKey(aa.runtimeConfig.SessionKey); err != nil {
@@ -353,7 +356,7 @@ func (aa *AlertAction) initRuntime(c *alertConfig) error {
 	}
 
 	// it is important to log this after the setting of the logger, but before the configuration of the parameters.
-	aa.Log("INFO", "Execution started. sid=\"%s\"", aa.GetSid())
+	aa.Log("INFO", `Execution started. app="%s" owner="%s", search_name="%s", sid="%s"`, aa.GetApp(), aa.GetOwner(), aa.GetSearchName(), aa.GetSid())
 
 	if err := aa.setGlobalParams(); err != nil {
 		return fmt.Errorf("initRuntime: %w", err)
@@ -366,27 +369,19 @@ func (aa *AlertAction) initRuntime(c *alertConfig) error {
 
 func (aa *AlertAction) setGlobalParams() error {
 	if aa.splunkd == nil {
-		return fmt.Errorf("setGlobalParams: no splunk service available. Execute this method after setSplunkService()")
+		panic("setGlobalParams: no splunk service available. Execute this method after setSplunkService()")
 	}
-	var configsCollection *splunkd.ConfigsCollection
-	var stanza *splunkd.ConfigResource
-	var loggedVal string
+	var val, loggedVal string
 	var err error
 	for _, param := range aa.globalParams {
 		// in case the value of the parameter has been set interactively, skip looking for it within splunk
-		if !param.actualValueIsSet {
-			configsCollection = splunkd.NewConfigsCollectionNS(aa.splunkd, param.configFile, aa.GetOwner(), aa.GetApp())
-
-			stanza, err = configsCollection.GetStanza(param.stanza)
+		if !param.HasSetValue() {
+			val, err = param.ReadValueNS(aa.splunkd, aa.GetOwner(), aa.GetApp())
 			if err != nil {
-				return fmt.Errorf("setGlobalParams: stanza '%s' not found in config '%s'. %w", param.stanza, param.configFile, err)
+				return fmt.Errorf("setGlobalParams: cannot retrieve value of global parameter '%s:[%s]/%s' within scope user='%s' app='%s'. %w", param.configFile, param.stanza, param.Name, aa.GetOwner(), aa.GetApp(), err)
 			}
-			if val, err := stanza.GetString(param.Name); err != nil {
-				if param.required {
-					return fmt.Errorf("setGlobalParams: required parameter not found '%s:[%s]/%s'", param.configFile, param.stanza, param.Name)
-				}
-				aa.Log("WARN", "Global parameter %s:[%s]/%s not found. Using default value", param.configFile, param.stanza, param.Name)
-			} else if val == "" && param.defaultValue == "" && param.required {
+
+			if val == "" && param.defaultValue == "" && param.required {
 				return fmt.Errorf("setGlobalParams: required parameter cannot have emtpy value '%s:[%s]/%s'", param.configFile, param.stanza, param.Name)
 			} else if val != "" {
 				loggedVal = val
@@ -394,7 +389,7 @@ func (aa *AlertAction) setGlobalParams() error {
 					loggedVal = "***masked***"
 				}
 				aa.Log("INFO", "Setting global parameter %s:[%s]/%s=\"%s\"", param.configFile, param.stanza, param.Name, loggedVal)
-				param.setValue(val)
+				param.SetValue(val)
 			}
 		}
 	}
@@ -405,8 +400,9 @@ func (aa *AlertAction) setGlobalParams() error {
 // Returns an error if any of these actions failed
 func (aa *AlertAction) setParams() error {
 	if aa.runtimeConfig == nil {
-		return fmt.Errorf("setParams: no runtime config available")
+		panic("setParams: no runtime config available. Execute this method after initializing the internal data structures")
 	}
+
 	var loggedVal string
 	// assign the actual value to the parameters
 	for _, param := range aa.params {
@@ -483,64 +479,53 @@ func (aa *AlertAction) Run(args []string, stdin io.Reader, stdout, stderr io.Wri
 		aa.EnableDebug()
 	}
 
-	if *executePtr {
+	if *executePtr || *interactivePtr {
 		start := time.Now()
+
 		if aa.execute == nil {
 			aa.Log("FATAL", "No actual alerting function has been defined")
 			return fmt.Errorf("no actual alerting function has been defined")
 		}
 
-		aa.Log("DEBUG", "Parsing run-time JSON configurations from STDIN")
-		runTimeConfig, err = getAlertConfigFromJSON(stdin)
-		if err != nil {
-			aa.Log("FATAL", "Parsing of run-time JSON configurations from STDIN failed. %s", err.Error())
-			return err
+		if *executePtr {
+			aa.Log("INFO", "Parsing run-time JSON configurations from STDIN")
+			runTimeConfig, err = getAlertConfigFromJSON(stdin)
+			if err != nil {
+				aa.Log("FATAL", "Parsing of run-time JSON configurations from STDIN failed. %s", err.Error())
+				return err
+			}
+		} else if *interactivePtr {
+			if runTimeConfig, err = aa.getAlertConfigInteractive(); err != nil {
+				aa.Log("FATAL", "Error when preparing execution configuration: %s", err.Error())
+				return err
+			}
 		}
 
 		aa.Log("DEBUG", "Setting run-time configuration: %+v", runTimeConfig)
 		// initRuntime is in charge of logging the "Execution started" message
-		err = aa.initRuntime(runTimeConfig)
-		if err != nil {
+		if err = aa.initRuntime(runTimeConfig); err != nil {
 			aa.Log("FATAL", "Setting of run-time configurations failed. %s", err.Error())
 			return err
 		}
 
-		// Note: setConfig() already performs validation of individual parameters.
+		// Note: initRuntime() already performs validation of individual parameters.
 		// However, sometimes multiple parameters should be analyzed as a group for dependencies between them.
 		// The function registered at "validateParams" is supposed to take care of that
 		if aa.validateParams != nil {
 			aa.Log("INFO", "Validating run-time parameters with registered function")
-			err = aa.validateParams(aa)
-			if err != nil {
+			if err = aa.validateParams(aa); err != nil {
 				aa.Log("FATAL", "Validation of run-time parameters failed. %s", err.Error())
 				return err
 			}
 		}
 		// At last, perform actual execution of the alerting function
 		aa.Log("INFO", "Executing alerting function")
-		err = aa.execute(aa)
-		duration := time.Since(start)
-		if err != nil {
-			aa.Log("FATAL", "Execution failed. sid=\"%s\" duration_ms=%d. %s", aa.GetSid(), duration.Milliseconds(), err.Error())
+		if err = aa.execute(aa); err != nil {
+			aa.Log("FATAL", "Execution failed. sid=\"%s\" duration_ms=%d. %s", aa.GetSid(), time.Since(start).Milliseconds(), err.Error())
 			return err
 		}
-		aa.Log("INFO", "Execution succeeded. sid=\"%s\" duration_ms=%d", aa.GetSid(), duration.Milliseconds())
+		aa.Log("INFO", "Execution succeeded. sid=\"%s\" duration_ms=%d", aa.GetSid(), time.Since(start).Milliseconds())
 		return nil
-	}
-
-	if *interactivePtr {
-		if runTimeConfig, err = aa.getAlertConfigInteractive(); err != nil {
-			aa.Log("FATAL", "Error when preparing execution configuration: %s", err.Error())
-			return err
-		} else {
-			aa.Log("DEBUG", "Setting run-time configuration: %+v", runTimeConfig)
-			err = aa.initRuntime(runTimeConfig)
-			if err != nil {
-				aa.Log("FATAL", "Setting of run-time configurations failed. %s", err.Error())
-				return err
-			}
-		}
-		return aa.execute(aa)
 	}
 
 	var actionSelected bool

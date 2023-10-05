@@ -73,7 +73,7 @@ func (aa *AlertAction) RegisterEndUserLogger(index, messagePrefix string) error 
 	}
 	sourcetype := "alertaction:" + aa.StanzaName
 	// initialize a logger to perform logging visible by the end user
-	aa.Log("INFO", "Will be logging results of executions for the end-user as index=\"%s\" sourcetype=\"\"", index, sourcetype)
+	aa.Log("INFO", "Will be logging results of execution for the end-user as index=\"%s\" sourcetype=\"%s\"", index, sourcetype)
 	aa.endUserLogger = aa.splunkd.NewLogger(messagePrefix, 0, index, "", fmt.Sprintf("Alert [%s] %s", aa.GetApp(), aa.GetSearchName()), sourcetype)
 	return nil
 }

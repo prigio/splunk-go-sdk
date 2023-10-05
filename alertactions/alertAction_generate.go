@@ -291,13 +291,14 @@ func (aa *AlertAction) generateAlertConfigJson() ([]byte, error) {
 func (aa *AlertAction) getAlertConfigInteractive() (*alertConfig, error) {
 	// first, need to get splunk endpoint, username and password to be able to login into the service if necessary.
 	ic := &alertConfig{}
-	fmt.Println("Interactively provide information to access local splunkd service.")
+	fmt.Println("> Interactively provide information to access local splunkd service.")
 	ss, err := splunkd.NewInteractive()
 	if err != nil {
 		return nil, fmt.Errorf("getAlertConfigInteractive: %w", err)
 	}
+	username, _ := ss.Username()
 	ic.App = utils.AskForInput("Splunk app context", "", false)
-
+	ic.Owner = utils.AskForInput("Owner (can be different to your username only if you have admin rights)", username, false)
 	ic.ServerUri = ss.GetSplunkdURI()
 	ic.SessionKey = ss.GetSessionKey()
 	if splunkdCtx, err := ss.AuthContext(); err != nil {
@@ -317,16 +318,16 @@ func (aa *AlertAction) getAlertConfigInteractive() (*alertConfig, error) {
 		resp := utils.AskForInput("Do you want to specify global parameters manually (y), or get their value from splunk (n)", "n", false)
 		if strings.ToLower(resp) == "y" {
 			for _, p := range aa.globalParams {
-				pVal := utils.AskForInput(p.Title, p.defaultValue, p.sensitive)
-				p.setValue(pVal)
+				pVal := utils.AskForInput(p.Title, p.defaultValue, p.IsSensitive())
+				p.SetValue(pVal)
 			}
 		}
 	}
 
-	fmt.Println("Interactively provide values for alert action parameters.")
+	fmt.Println("> Interactively provide values for alert action parameters.")
 	ic.Configuration = make(map[string]string)
 	for _, p := range aa.params {
-		ic.Configuration[p.Name] = utils.AskForInput(p.Title, p.defaultValue, false)
+		ic.Configuration[p.Name] = utils.AskForInput(p.Title, p.defaultValue, p.IsSensitive())
 	}
 
 	return ic, nil

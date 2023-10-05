@@ -174,8 +174,17 @@ func (p *Param) setValue(v string) error {
 	return nil
 }
 
-// GetValue returns the run-time value which was set for this parameter, or its DefaultValue in case no value has been set
+// SetValue forces the configuration of a value for the parameter. This can be used in cases where the parameter value comes from external sources like:
+// - manual, interactive setting
+// - the XML provided to a modular input at startup
+// - the XML or JSON provided to an alert action at startup
+func (p *Param) SetValue(v string) error {
+	return p.setValue(v)
+}
+
+// GetValue returns the run-time value which was forcibly set for this parameter, or its DefaultValue in case no value has been set
 // It substitutes env variables in the $var and ${var} within the value
+// Note: this does NOT access any Splunkd endpoint to read the value from splunk's .conf files.
 func (p *Param) GetValue() string {
 	if p.actualValueIsSet {
 		return os.ExpandEnv(p.actualValue)
@@ -197,6 +206,12 @@ func (p *Param) GetChoices() []string {
 // The parameter value will be masked when being logged or printed-out.
 func (p *Param) SetSensitive() {
 	p.sensitive = true
+}
+
+// IsSensitive informs whether the parameter contains sensitive data.
+// If true, the parameter value MUST be masked when being logged or printed-out.
+func (p *Param) IsSensitive() bool {
+	return p.sensitive
 }
 
 // GetConfigDefinition returns a triple (configFile, stanza, param name) defining where this parameter has been defined.
@@ -222,4 +237,9 @@ func (p *Param) ReadValueNS(client *splunkd.Client, owner, app string) (string, 
 	)
 	col := splunkd.NewPropertiesCollectionNS(client, p.configFile, owner, app)
 	return col.GetProperty(p.stanza, p.Name)
+}
+
+// HasSetValue informs whether a forced value has been set for the parameter.
+func (p *Param) HasSetValue() bool {
+	return p.actualValueIsSet
 }
