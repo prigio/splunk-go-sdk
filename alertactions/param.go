@@ -19,7 +19,7 @@ type ArgValidation string
 type ParamType int
 
 // ParamDataType is used to store the expected type of the parameter's value. Possible values are string, number, bool.
-type ParamDataType int
+//type ParamDataType int
 
 const (
 	// https://dev.splunk.com/enterprise/docs/devtools/customalertactions/createuicaa#Custom-HTML-elements
@@ -50,7 +50,7 @@ type Param struct {
 	// Name is the internal name of the parameter, the one actually provided within splunk configurations
 	Name        string
 	Description string
-	dataType    ParamDataType
+	//dataType    ParamDataType
 	// uiType encodes how this parameter should be represented in the UI. Use the ParamTypeXXX constants for this.
 	uiType ParamType
 	// defaultValue is used in case an actual value has not been set by the run-time configurations
@@ -242,4 +242,31 @@ func (p *Param) ReadValueNS(client *splunkd.Client, owner, app string) (string, 
 // HasSetValue informs whether a forced value has been set for the parameter.
 func (p *Param) HasSetValue() bool {
 	return p.actualValueIsSet
+}
+
+// GetDefaultValue returns the value of the parameter to be used in case no specific configuration is available
+func (p *Param) GetDefaultValue() string {
+	return p.defaultValue
+}
+
+// GetConfigFile returns the name of the configuration file holding this parameter.
+func (p *Param) GetConfigFile() string {
+	return p.configFile
+}
+
+// GetConfigFile returns the name of the stanza within the configuration file holding this parameter.
+// If empty, multiple stanzas within the configuration file can hold this parameter
+func (p *Param) GetStanza() string {
+	return p.stanza
+}
+
+func (p *Param) String() string {
+	if p.configFile != "" && p.stanza != "" {
+		return fmt.Sprintf("%s[%s]/%s", p.configFile, p.stanza, p.Name)
+	}
+	if p.configFile != "" && p.stanza == "" {
+		return fmt.Sprintf("%s[*]/%s", p.configFile, p.Name)
+	}
+	// if no information about configFile and Stanza are available, just return the name
+	return p.Name
 }
