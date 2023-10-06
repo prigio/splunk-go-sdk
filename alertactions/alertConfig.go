@@ -12,19 +12,18 @@ import (
 /*
 This file contains structs and utilities to read the JSON-based configuration
 provided by Splunk to an alert action via STDIN
-*/
 
-/* This is the most generic form of the JSON coming from splunkd via stdinput
+This is the most generic form of the JSON coming from splunkd via STDIN
 {
     "app": "search",
     "owner": "admin",
-    "results_file": "/Applications/Splunk/var/run/splunk/dispatch/scheduler__admin__search__RMD5e7649a8a42798738_at_1689609720_2/results.csv.gz",
-    "results_link": "http://MacBook-Pro.local:8000/app/search/@go?sid=scheduler__admin__search__RMD5e7649a8a42798738_at_1689609720_2",
+    "results_file": "/Applications/Splunk/var/run/splunk/dispatch/scheduler__.../results.csv.gz",
+    "results_link": "http://MacBook-Pro.local:8000/app/search/@go?sid=scheduler__a...",
     "search_uri": "/servicesNS/admin/search/saved/searches/jira+test",
     "server_host": "MacBook-Pro.local",
     "server_uri": "https://127.0.0.1:8089",
-    "session_key": "onrmI0ToM9zNp5BLDl",
-    "sid": "scheduler__admin__search__RMD5e7649a8a42798738_at_1689609720_2",
+    "session_key": "onrmI0...",
+    "sid": "scheduler__...",
     "search_name": "jira test",
     "configuration": {
         "comment": "thanks",
@@ -41,7 +40,7 @@ provided by Splunk to an alert action via STDIN
         "_raw": "07-17-2023 18:01:36.996 +0200 INFO  Metrics - group=searchscheduler, eligible=0, delayed=0, dispatched=0, skipped=0, skipped_dma_ra=0, total_lag=0, max_lag=0, window_max_lag=0, window_total_lag=0, scheduler_cycle_max=0.000, scheduler_cycle_total=0.000, scheduler_cycles=0, load_search_cycle_max=0.000, load_search_cycle_total=0.000, schedule_search_cycle_max=0.000, schedule_search_cycle_total=0.000, load_saved_searches=0.000, load_auto_summarized=0.000, load_dma=0.000, load_deferred_calculation=0.000, load_priority_calculation=0.000, load_cycles=0, disp_get_next_runtime=0.000, disp_determine_can_run=0.000, disp_window_lag_calc=0.000, disp_auto_summary_updates=0.000, disp_advance_next_runtime=0.000, disp_update_logging=0.000, disp_dispatch_job=0.000, max_running=0, actions_triggered=0, completed=0, total_runtime=0.000, max_runtime=0.000, alert_cycle_max=0.000, alert_cycle_total=0.000, alert_cycles=3",
         "_serial": "0",
         "_si": [
-            "Paolos-MacBook-Pro.local",
+            "mac.local",
             "_internal"
         ],
         "_sourcetype": "splunkd",
@@ -56,16 +55,15 @@ provided by Splunk to an alert action via STDIN
         "date_year": "2023",
         "date_zone": "120",
         "eventtype": "",
-        "host": "Paolos-MacBook-Pro.local",
+        "host": "mac.local",
         "index": "_internal",
         "linecount": "1",
         "punct": "--_::._+____-_=,_=,_=,_=,_=,_=,_=,_=,_=,_=,_=.,_=.",
         "source": "/Applications/Splunk/var/log/splunk/metrics.log",
         "sourcetype": "splunkd",
-        "splunk_server": "Paolos-MacBook-Pro.local",
+        "splunk_server": "mac.local",
         "splunk_server_group": "",
-
-		"any other fields identified during the search": ""
+        "any other fields identified during the search": ""
 }
 */
 

@@ -53,8 +53,7 @@ func (aa *AlertAction) Log(level string, message string, a ...interface{}) {
 		level,
 		message)
 
-	// isAtTerminal is global, set at the beginning of this file, in order to only do this once per execution
-	if !isAtTerminal && aa.splunkdlogger != nil {
+	if !aa.isAtTerminal && aa.splunkdlogger != nil {
 		aa.splunkdlogger.Printf(message, a...)
 	} else {
 		fmt.Fprintf(os.Stderr, message, a...)
@@ -63,10 +62,12 @@ func (aa *AlertAction) Log(level string, message string, a ...interface{}) {
 
 // RegisterEndUserLogger configures logging to report to the end-user the results of the alert execution.
 // Messages will be logged into the specified index and can have a custom prefix added to them.
+//
+// This method can only be executed after the run-time has been initialized, namely after [Run] as read runtime configurations from STDIN.
+// This method panics if executed before proper initialization.
 func (aa *AlertAction) RegisterEndUserLogger(index, messagePrefix string) error {
 	if aa.splunkd == nil {
-		// already available
-		return fmt.Errorf("alert action setEndUserLogger: no splunkd client available. This operation must be performed when a runtime config is available")
+		panic("registerEndUserLogger: no runtime config available. This operation must be performed when a runtime config is available")
 	}
 	if index == "" {
 		return fmt.Errorf("alert action setEndUserLogger: index parameter cannot be emtpy")
@@ -80,12 +81,12 @@ func (aa *AlertAction) RegisterEndUserLogger(index, messagePrefix string) error 
 
 // LogForEndUser writes a log to an index visible for the end-user of the alert in order to report on
 // the alert execution.
-// It is NECESSARY to first initialize the logger using [RegisterEndUserLogger].
-// This method SILENTLY FAILS if used without proper initialization.
+// It is MANDATORY to first initialize the logger using [RegisterEndUserLogger].This method panic if that was not done.
+//
 // Argument 'message' can use formatting markers as fmt.Sprintf. Aditional arguments 'a' will be provided to fmt.Sprintf
 func (aa *AlertAction) LogForEndUser(level string, message string, a ...interface{}) {
 	if aa.endUserLogger == nil {
-		return
+		panic("logForEndUser: logger available. Use RegisterEndUserLogger to initialize a logger when a runtime config is available")
 	}
 	level = strings.ToUpper(level)
 	message = fmt.Sprintf("%s %s - %s\n",

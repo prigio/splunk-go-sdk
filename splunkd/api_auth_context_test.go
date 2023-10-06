@@ -5,7 +5,8 @@ import (
 )
 
 func TestContext(t *testing.T) {
-	if ss, err = New(testing_endpoint, testing_insecureSkipVerify, testing_proxy); err != nil {
+	ss, err := New(testing_endpoint, testing_insecureSkipVerify, testing_proxy)
+	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}

@@ -12,10 +12,8 @@ import (
 )
 
 const (
-	defaultScheme = "https"
-	defaultHost   = "localhost"
-	defaultPort   = 8089
-	httpTimeout   = 10 * time.Second
+	defaultSplunkdURI string        = "https://localhost:8089"
+	httpTimeout       time.Duration = 10 * time.Second
 )
 
 type Client struct {
@@ -83,16 +81,15 @@ func New(splunkdUrl string, insecureSkipVerify bool, proxy string) (*Client, err
 	return ss, nil
 }
 
+// NewFromDefaults instantiates a client using splunkd's default API endpoint: https://localhost:8089
 func NewFromDefaults() (*Client, error) {
-	return New(fmt.Sprintf("%s://%s:%d", defaultScheme, defaultHost, defaultPort), true, "")
+	return New(defaultSplunkdURI, true, "")
 }
 
-// NewInteractive uses the Params[] definition of an alert action to prepare a configuration based on:
-// - command line parameters
-// - interactively asking the user if no command-line parameter was found for an argument
+// NewInteractive interactively asks the end-user for necessary configuration parameters to instantiate a splunkd client and login into the API
 func NewInteractive() (*Client, error) {
 	// first, need to get splunk endpoint, username and password to be able to login into the service if necessary.
-	uri := utils.AskForInput("Splunkd URL", "https://localhost:8089", false)
+	uri := utils.AskForInput("Splunkd URL", defaultSplunkdURI, false)
 	username := utils.AskForInput("Splunk username", "admin", false)
 	password := utils.AskForInput("Splunk password", "", true)
 	ss, err := New(uri, true, "")
@@ -114,21 +111,6 @@ func (ss *Client) GetSplunkdURI() string {
 }
 
 //func (ss *SplunkService) getCollection(method, urlPath string, body io.Reader) (httpCode int, respBody []byte, err error) {
-
-// SetNamespace updates the NameSpace configurations for the session
-func (ss *Client) SetNamespace(owner, app string, sharing SplunkSharing) error {
-	ns, err := NewNamespace(owner, app, sharing)
-	if err != nil {
-		return fmt.Errorf("splunk service setNamespace: %w", err)
-	}
-	ss.nameSpace = *ns
-	return nil
-}
-
-// SetNamespaceFromNS updates the NameSpace configurations for the session using an existing NameSpace
-func (ss *Client) SetNamespaceFromNS(ns Namespace) {
-	ss.nameSpace = ns
-}
 
 func (ss *Client) GetCredentials() *CredentialsCollection {
 	if ss.credentials == nil {
@@ -171,3 +153,18 @@ func (ss *Client) GetConfigsNS(filename, owner, app string) *ConfigsCollection {
 	return ss.configs[filename]
 }
 */
+
+// SetNamespace updates the NameSpace configurations for the session
+func (ss *Client) SetNamespace(owner, app string, sharing SplunkSharing) error {
+	ns, err := NewNamespace(owner, app, sharing)
+	if err != nil {
+		return fmt.Errorf("splunk service setNamespace: %w", err)
+	}
+	ss.nameSpace = *ns
+	return nil
+}
+
+// SetNamespaceFromNS updates the NameSpace configurations for the session using an existing NameSpace
+func (ss *Client) SetNamespaceFromNS(ns Namespace) {
+	ss.nameSpace = ns
+}

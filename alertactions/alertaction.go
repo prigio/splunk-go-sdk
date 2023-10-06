@@ -18,10 +18,6 @@ import (
 	"github.com/prigio/splunk-go-sdk/v2/splunkd"
 )
 
-// isAtTerminal is a boolean which is true if the alert action is being executed on a command-line or not.
-// this is used to modify the logging format
-var isAtTerminal = isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
-
 // AlertingFunc is the signature required for the functions responsible for:
 //
 //  1. Validate the run-time parameters provided to the AlertAction.
@@ -73,6 +69,11 @@ type AlertAction struct {
 	splunkdlogger *log.Logger
 	// endUserLogger is used to log messages for the end user in an index preconfigured by them
 	endUserLogger *log.Logger
+
+	// isAtTerminal is a boolean which is true if the alert action is being executed on a command-line or not.
+	// this is used to modify the logging format
+	isAtTerminal bool
+
 	// these are used by the Run() function and are useful for testing.
 	stdin  io.Reader
 	stdout io.Writer
@@ -88,11 +89,12 @@ func New(stanzaName, label, description, iconPath string) (*AlertAction, error) 
 	}
 
 	var aa = &AlertAction{
-		StanzaName:  stanzaName,
-		Label:       label,
-		Description: description,
-		IconPath:    iconPath,
-		runID:       uuid.New().String()[0:8],
+		StanzaName:   stanzaName,
+		Label:        label,
+		Description:  description,
+		IconPath:     iconPath,
+		runID:        uuid.New().String()[0:8],
+		isAtTerminal: isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd()),
 	}
 	return aa, nil
 }
@@ -447,17 +449,16 @@ func (aa *AlertAction) RegisterAlertFunc(f AlertingFunc) {
 	aa.execute = f
 }
 
-// printHelp prints command-line usage instructions to STDOUT
-func (aa *AlertAction) printHelp(f *flag.FlagSet) {
-	fmt.Printf("Usage for custom alert action '%s'\n", aa.StanzaName)
-	fmt.Printf("Label: %s\n", aa.Label)
-	fmt.Printf("Description: %s\n", aa.Description)
-	fmt.Println("NOTE: Splunk invokes the alert action using the '--execute' flag, unless differently specified within alert_actions.conf")
-	fmt.Println("")
-	f.PrintDefaults()
-}
-
 // Run is the function responsible for actual execution of the alert action.
+// Under normal execution (invokation by splunk), this is responsible to:
+//
+// - parse the configurations on STDIN,
+// - assign actual values to the parameters,
+// - initialize the runtime
+// - execute the defined validation function, if any
+// - execute the alerting function
+//
+// Run is additionally responsible to parse command-line arguments and provide the utilities to generate splunk configuration files, between others.
 func (aa *AlertAction) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	var err error
 	var runTimeConfig *alertConfig
@@ -481,6 +482,7 @@ func (aa *AlertAction) Run(args []string, stdin io.Reader, stdout, stderr io.Wri
 	getSSSpecPtr := flags.Bool("get-saved-searches-spec", false, "Print out a template for README/savedsearches.conf.spec")
 	getDocuPtr := flags.Bool("get-documentation", false, "Print out markdown-formatted documentation for the alert")
 	getUIHTML := flags.Bool("get-ui-html", false, fmt.Sprintf("Print out a template for the UI configuration to be stored at default/data/ui/alerts/%s.html", aa.StanzaName))
+
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -531,10 +533,10 @@ func (aa *AlertAction) Run(args []string, stdin io.Reader, stdout, stderr io.Wri
 		// At last, perform actual execution of the alerting function
 		aa.Log("INFO", "Executing alerting function")
 		if err = aa.execute(aa); err != nil {
-			aa.Log("FATAL", "Execution failed. sid=\"%s\" duration_ms=%d. %s", aa.GetSid(), time.Since(start).Milliseconds(), err.Error())
+			aa.Log("FATAL", `Execution failed. sid="%s" duration_ms=%d. %s`, aa.GetSid(), time.Since(start).Milliseconds(), err.Error())
 			return err
 		}
-		aa.Log("INFO", "Execution succeeded. sid=\"%s\" duration_ms=%d", aa.GetSid(), time.Since(start).Milliseconds())
+		aa.Log("INFO", `Execution succeeded. sid="%s" duration_ms=%d`, aa.GetSid(), time.Since(start).Milliseconds())
 		return nil
 	}
 
@@ -580,7 +582,23 @@ func (aa *AlertAction) Run(args []string, stdin io.Reader, stdout, stderr io.Wri
 	}
 	// if no valid command-line parameters were provided
 	if !actionSelected {
-		aa.printHelp(flags)
+		printHelp(aa, flags, stderr)
 	}
 	return nil
+}
+
+// printHelp prints command-line usage instructions to STDOUT
+func printHelp(aa *AlertAction, f *flag.FlagSet, out io.Writer) {
+	if aa == nil {
+		return
+	}
+	fmt.Fprintf(out, "Usage for custom alert action '%s'\n", aa.StanzaName)
+	fmt.Fprintf(out, "Label: %s\n", aa.Label)
+	fmt.Fprintf(out, "Description: %s\n", aa.Description)
+	fmt.Fprintln(out, "NOTE: Splunk invokes the alert action using the '--execute' flag, unless differently specified within alert_actions.conf")
+	fmt.Fprintln(out, "")
+	if f != nil {
+		f.SetOutput(out)
+		f.PrintDefaults()
+	}
 }

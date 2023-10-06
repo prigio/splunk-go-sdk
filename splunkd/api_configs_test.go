@@ -103,7 +103,7 @@ func TestConfigResourceGetInt(t *testing.T) {
 	cr := make(ConfigResource, 0)
 
 	cr["keyStr"] = "somestring"
-	_, err = cr.GetInt("keyStr")
+	_, err := cr.GetInt("keyStr")
 	if err == nil {
 		t.Errorf("ConfigResource map: incorrect nil error return value when trying to read string '%v' as int", cr["keyStr"])
 	}
@@ -144,7 +144,7 @@ func TestConfigResourceGetFloat(t *testing.T) {
 	cr := make(ConfigResource, 0)
 
 	cr["keyStr"] = "somestring"
-	_, err = cr.GetFloat("keyStr")
+	_, err := cr.GetFloat("keyStr")
 	if err == nil {
 		t.Errorf("ConfigResource map: incorrect nil error return value when trying to read string '%v' as float", cr["keyStr"])
 	}

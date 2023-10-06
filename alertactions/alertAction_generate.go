@@ -1,7 +1,6 @@
 package alertactions
 
 /*
-
 This file contain assistance methods to the AlertAction struct used to
 generate splunk configuration files based on the registered parameter and global parameters.
 */
