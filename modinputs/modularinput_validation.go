@@ -12,6 +12,10 @@ import (
 // See https://docs.splunk.com/Documentation/SplunkCloud/latest/AdvancedDev/ModInputsScripts#Validation_of_arguments
 type ValidationRule string
 
+// ValidationFun is the signature of the function used to validate the parameters received from Splunk
+// (only used if the mod input is configured to use external validation)
+type ValidationFunc func(*ModularInput, Stanza) error
+
 const (
 	// Ad-hoc validation codes.
 	// See https://docs.splunk.com/Documentation/SplunkCloud/latest/AdvancedDev/ModInputsScripts#Validation_of_arguments
@@ -23,6 +27,12 @@ const (
 	ValidationIsPosInt       ValidationRule = "is_pos_int"
 )
 
+// RegisterValidationFunc registers a function of type [ValidationFunc] in charge of analysing the parameters provided within a stanza as a whole and decide whether they are valid.
+func (mi *ModularInput) RegisterValidationFunc(f ValidationFunc) {
+	mi.useExternalValidation = true
+	mi.validate = f
+}
+
 // SetParamBasicValidation configures a predefined validation for the selected parameter.
 // Available validations are listed as modinputs.Validation*.
 //
@@ -31,7 +41,6 @@ const (
 // The developer provides the parameter name, and the necessary validation rule.
 //
 // See https://docs.splunk.com/Documentation/SplunkCloud/latest/AdvancedDev/ModInputsScripts#Validation_of_arguments for more info
-
 func (mi *ModularInput) SetParamBasicValidation(paramName string, validationRule ValidationRule) error {
 	if !(validationRule == ValidationIsBool || validationRule == ValidationIsPort || validationRule == ValidationIsPosInt || validationRule == ValidationIsNonNegInt || validationRule == ValidationIsAvailUDPPort || validationRule == ValidationIsAvailTCPPort) {
 		return errors.NewErrInvalidParam("setParamBasicValidation["+paramName+"]", nil, "'validationRule' must be one of '', provided='%s'", validationRule)

@@ -25,7 +25,7 @@ func TestAddArgument(t *testing.T) {
 	}
 
 	for i, v := range cases {
-		_, err = mi.RegisterNewParam(v.name, v.title, v.description, v.defaultValue, v.dataType, v.validation, v.requiredOnCreate, false)
+		_, err = mi.RegisterNewParam(v.name, v.title, v.description, v.defaultValue, v.dataType, v.requiredOnCreate, false)
 		if err != nil {
 			t.Error(err.Error())
 			t.FailNow()
@@ -52,7 +52,7 @@ func TestSchemeXML(t *testing.T) {
 		useExternalValidation: false,
 		useSingleInstance:     false,
 	}
-	mi.RegisterNewParam("one", "Param one", "Test parameter one, of string type, without validation", "", "string", "", true, false)
+	mi.RegisterNewParam("one", "Param one", "Test parameter one, of string type, without validation", "", "string", true, false)
 
 	// when modifying this, you need to pay attention that the editor
 	// may want to substitute spaces with tabs, thus causing tests to fail.
@@ -100,7 +100,7 @@ func TestEvent(t *testing.T) {
 			{Name: "source", Value: "testsource"},
 		},
 	}
-	ev := mi.NewDefaultEvent(&st)
+	ev := NewEvent(&st)
 	ev.Data = "some log message"
 	if ev.Stanza != st.Name {
 		t.Errorf("Event's stanza does not match: expected=%s got=%s", st.Name, ev.Stanza)

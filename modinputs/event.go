@@ -3,7 +3,6 @@ package modinputs
 import (
 	"encoding/xml"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +26,33 @@ type SplunkEvent struct {
 	cachedEpochStr string
 }
 
+// NewDefaultEvent provides a template for the SplunkEvent to be used to log actual data to be imported to Splunk
+func NewEvent(stanza *Stanza) *SplunkEvent {
+	if stanza != nil {
+		//mi.Log("DEBUG", fmt.Sprintf("NewDefaultEvent: stanza is NOT nil. %v", stanza.Params))
+		// NOT specifying Data intentionally
+		return &SplunkEvent{
+			// Anything can be overridded by the actual script
+			Time:       time.Now(),
+			Stanza:     stanza.Name,
+			SourceType: stanza.Sourcetype(),
+			Index:      stanza.Index(),
+			Host:       stanza.Host(),
+			Source:     stanza.Source(),
+			Unbroken:   true,
+			Done:       true,
+		}
+
+	} else {
+		// If no configurations are present, we basically just return a generic event
+		return &SplunkEvent{
+			Time:     time.Now(),
+			Unbroken: true,
+			Done:     true,
+		}
+	}
+}
+
 // EpochTime reads the Time parameters of SplunkEvent se and returns an floating point
 // representation of the time expressed as Epoch with millisecond precision
 func (se *SplunkEvent) epochTimeStr() string {
@@ -37,16 +63,6 @@ func (se *SplunkEvent) epochTimeStr() string {
 		se.cachedEpochStr = strconv.FormatFloat(utils.GetEpoch(se.Time), 'f', 3, 64)
 	}
 	return se.cachedEpochStr
-}
-
-// writeOut is a private function which allows the modular input to skip counting the events emitted.
-// useful for internal logging, which is not counter.
-func (se *SplunkEvent) writeOut() (cnt int, err error) {
-	if xmlStr, err := se.xml(); err != nil {
-		return -1, err
-	} else {
-		return os.Stdout.WriteString(xmlStr)
-	}
 }
 
 /*

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,19 +17,11 @@ import (
 	"github.com/prigio/splunk-go-sdk/v2/splunkd"
 )
 
-// isAtTerminal is a boolean which is true if the alert action is being executed on a command-line or not.
-// this is used to modify the logging format
-var isAtTerminal = isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
-
 // StreamingFunc is the signature of the function used to generate the data for the modular input
 type StreamingFunc func(*ModularInput, Stanza) error
 
 // StreamingFuncSingleInstance is the signature of the function used to generate the data for the modular input when running in single instance mode
 type StreamingFuncSingleInstance func(*ModularInput, []Stanza) error
-
-// ValidationFun is the signature of the function used to validate the parameters received from Splunk
-// (only used if the mod input is configured to use external validation)
-type ValidationFunc func(*ModularInput, Stanza) error
 
 // ModularInput is the main structure defining how a modular input looks like.
 // It provides a way for the user to define a Splunk modular input and makes
@@ -86,6 +79,12 @@ type ModularInput struct {
 	internalLogEvent               *SplunkEvent //this is used to setup a standardized event using for logging to index=_internal. If this is not nil, internal loggin is performed through SplunkEvents written on Stdout instead of plain output on Stderr
 	cntDataEventsGeneratedbyStanza int64        // counter of data events emitted by the stanza being currently processed (internal loggin is excluded)
 	cntDataEventsGeneratedTotal    int64        // counter of data events emitted in total (internal loggin is excluded)
+	// isAtTerminal is a boolean which is true if the alert action is being executed on a command-line or not.
+	// this is used to modify the logging format
+	isAtTerminal bool
+	// Mutexes for various operations. There are two of these, since logging while performing configuration changes would block everything otherwise.
+	mu    sync.RWMutex // mutex for modular input configuration changes
+	logMu sync.Mutex   // mutex for emitting data to splunk on STDOUT/STDERR
 }
 
 func New(stanzaName, label, description string) (*ModularInput, error) {
@@ -102,49 +101,60 @@ func New(stanzaName, label, description string) (*ModularInput, error) {
 		Description:       description,
 		defaultSourcetype: stanzaName,
 		runID:             uuid.New().String()[0:8],
+		isAtTerminal:      isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd()),
 	}
 	return mi, nil
 }
 
-// SetSingleInstanceExecution configures the Modular Input to execute on all configuration stanzas being provided by splunk at once.
-func (mi *ModularInput) SetSingleInstanceExecution() error {
-	if mi.stream != nil {
-		return fmt.Errorf("SetSingleInstanceExecution: cannot activate single instance execution mode when a streaming function for single stanzas has been configured")
-	}
-	mi.useSingleInstance = true
-	return nil
-}
-
 // RegisterStreamingFunc registera a streaming function to be executed on one configuration stanza which is provided by Splunk at run time
-func (mi *ModularInput) RegisterStreamingFunc(f StreamingFunc) error {
-	if mi.useSingleInstance {
-		return fmt.Errorf(("registerStreamingFunc: cannot register a streaming function when SingleInstanceMode is activated"))
+func (mi *ModularInput) RegisterStreamingFunc(f StreamingFunc) {
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+
+	mi.Log("INFO", "Activating multi-instance execution mode and registering necessary function")
+	if mi.streamSingleInstance != nil {
+		mi.Log("WARN", "De-registering streaming function for single-instance mode, as multi-instance mode has been activated")
+		mi.streamSingleInstance = nil
 	}
+	mi.useSingleInstance = false
 	mi.stream = f
-	return nil
 }
 
 // RegisterStreamingFunc registera a streaming function to be executed on one configuration stanza which is provided by Splunk at run time
-func (mi *ModularInput) RegisterStreamingFuncSingleInstance(f StreamingFuncSingleInstance) error {
-	if !mi.useSingleInstance {
-		return fmt.Errorf("registerStreamingFuncSingleInstance: cannot register a single-instance streaming function when SingleInstanceMode is not activated")
+func (mi *ModularInput) RegisterStreamingFuncSingleInstance(f StreamingFuncSingleInstance) {
+	mi.Log("INFO", "Activating single-instance execution mode and registering necessary function")
+	if mi.stream != nil {
+		mi.Log("WARN", "De-registering streaming function for multi-instance mode, as single-instance mode has been activated")
+		mi.stream = nil
 	}
+
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+	mi.useSingleInstance = true
 	mi.streamSingleInstance = f
-	return nil
 }
 
 // EnableDebug sets debug mode for the modular input
 func (mi *ModularInput) EnableDebug() {
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+
 	mi.debug = true
 }
 
 // IsDebug returns true if debug mode has been activated for the modular input
 func (mi *ModularInput) IsDebug() bool {
+	mi.mu.RLock()
+	defer mi.mu.RUnlock()
+
 	return mi.debug
 }
 
 func (mi *ModularInput) GetRunId() string {
 	if mi.runID == "" {
+		mi.mu.Lock()
+		defer mi.mu.Unlock()
+
 		mi.runID = uuid.New().String()[0:8]
 	}
 	return mi.runID
@@ -166,6 +176,9 @@ func (mi *ModularInput) GetSplunkService() (*splunkd.Client, error) {
 // Prerequisites to execution: a runtime configuration (sessionkey + splunkd URI) must be already available when performing this method.
 // The client has already been authenticated using the sessionKey which Splunk provides when starting the modular input.
 func (mi *ModularInput) setSplunkService() error {
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+
 	var (
 		ss  *splunkd.Client
 		err error
@@ -190,149 +203,71 @@ func (mi *ModularInput) setSplunkService() error {
 	return nil
 }
 
-// RegisterNewParam adds a new parameter to the alert action.
-// The argument is additionally returned for further processing, if needed.
-//
-// The following are the only adminissible values for the dataType. Anything else will generate an error.
-// - "string"
-// - "boolean"
-// - "number"
-func (mi *ModularInput) RegisterNewParam(name, title, description, defaultValue, dataType, validation string, required, sensitive bool) (*params.Param, error) {
-	var (
-		p   *params.Param
-		err error
-	)
-	// check if the parameter is already present
-	// return error in case it is already there
-	if _, err = mi.GetParam(name); err == nil {
-		return nil, errors.NewErrInvalidParam("registerNewParam["+name+"]", nil, "'%s' already exists", name)
-	}
-	p, err = params.NewParam("inputs.conf", mi.StanzaName, name, title, description, defaultValue, required, sensitive)
-	if err != nil {
-		return nil, fmt.Errorf("registerNewParam: %w", err)
-	}
-	err = p.SetDataType(dataType)
-	if err != nil {
-		return nil, errors.NewErrInvalidParam("registerNewParam["+name+"]", err, `'dataType' provided="%s"`, dataType)
-	}
-	if validation != "" {
-		p.SetCustomProperty("validation", validation)
-	}
-	if mi.params == nil {
-		mi.params = make([]*params.Param, 0, 1)
-	}
-	mi.params = append(mi.params, p)
-	return p, nil
-}
-
-// GetParam searches for the param having the provided name.
-// Returns a pointer to the found parameter, or an error if the parameter was not found
-func (mi *ModularInput) GetParam(name string) (*params.Param, error) {
-	for _, p := range mi.params {
-		if p.GetName() == name {
-			return p, nil
-		}
-	}
-	return nil, fmt.Errorf("getParam[%s]: not found", name)
-}
-
-// RegisterNewGlobalParam adds a new parameter to the alert action.
-// The argument is additionally returned for further processing, if needed.
-func (mi *ModularInput) RegisterNewGlobalParam(configFile, stanza, name, title, description, defaultValue string, required, sensitive bool) (*params.Param, error) {
-	var p *params.Param
-	var err error
-	// check if the parameter is already present
-	// return error in case it is already there
-	if _, err = mi.GetGlobalParam(name); err == nil {
-		return nil, errors.NewErrInvalidParam("registerNewGlobalParam["+name+"]", nil, "'%s' already exists", name)
-	}
-	p, err = params.NewParam(configFile, stanza, name, title, description, defaultValue, required, sensitive)
-	if err != nil {
-		return nil, fmt.Errorf("registerNewGlobalParam[%s]: %w", name, err)
-	}
-	if mi.globalParams == nil {
-		mi.globalParams = make([]*params.Param, 0, 1)
-	}
-	mi.globalParams = append(mi.globalParams, p)
-	return p, nil
-}
-
-// GetGlobalParam searches for the global param having the provided name.
-// Returns a pointer to the found parameter, or an error if the parameter was not found
-func (aa *ModularInput) GetGlobalParam(name string) (*params.Param, error) {
-	for _, p := range aa.globalParams {
-		if p.GetName() == name {
-			return p, nil
-		}
-	}
-	return nil, fmt.Errorf(`getGlobalParam[%s]: parameter not found`, name)
-}
-
-func (mi *ModularInput) RegisterValidationFunc(f ValidationFunc) {
-	mi.useExternalValidation = true
-	mi.validate = f
-}
-
 // Log writes a log so that it can be read by Splunk without being interpreted as an actual event generated by the script
 // Argument 'message' can use formatting markers as fmt.Sprintf. Aditional arguments 'a' will be provided to fmt.Sprintf
-func (mi *ModularInput) Log(level string, message string, a ...interface{}) (err error) {
+func (mi *ModularInput) Log(level string, message string, a ...interface{}) {
 	level = strings.ToUpper(level)
+	if level == "DEBUG" && !mi.debug {
+		// do not do anything if debug is not enabled
+		return
+	}
 	if level == "WARNING" {
 		// Typical error, just manage it...
 		level = "WARN"
 	}
-	if level != "DEBUG" && level != "INFO" && level != "WARN" && level != "ERROR" && level != "FATAL" {
-		fmt.Fprintf(os.Stderr, "ERROR - ModularInput.Log invoked with invalid level parameter. Accepted: DEBUG, INFO, WARN, ERROR, FATAL. Provided: '%s'\n", level)
-		return fmt.Errorf("ModularInput.Log: invalid value of 'level' provided. Accepted: DEBUG, INFO, WARN, ERROR, FATAL. Provided: '%s'", level)
-	}
-	if level != "DEBUG" || (level == "DEBUG" && mi.debug) {
-		// do not do anything if debug is not enabled
+	if mi.internalLogEvent != nil {
 		t := time.Now().Round(time.Millisecond)
-		if mi.internalLogEvent != nil {
-			mi.internalLogEvent.Time = t
-			// prefix the message with timestamp and log_level
-			message = "[" + t.Format("2006-01-02 15:04:05.000 -0700") + "] " + level + " run_id=" + mi.runID + " - " + message
-			//time.Format uses a string with such parameters to define the output format: Mon Jan 2 15:04:05 -0700 MST 2006
-			mi.internalLogEvent.Data = fmt.Sprintf(message, a...)
-			// using writeOut() to skip counting the events, as we do not want to count the internal logs...
-			mi.internalLogEvent.writeOut()
-		} else {
-			// XML-based logging has not yet been activated: using STDERR instead
-			message = "ModularInput " + mi.StanzaName + ": " + level + " run_id=" + mi.runID + " - " + message + "\n"
-			_, err = fmt.Fprintf(os.Stderr, message, a...)
-		}
+		mi.internalLogEvent.Time = t
+		// prefix the message with timestamp and log_level
+		message = "[" + t.Format("2006-01-02 15:04:05.000 -0700") + "] " + level + " run_id=" + mi.runID + " - " + message
+		//time.Format uses a string with such parameters to define the output format: Mon Jan 2 15:04:05 -0700 MST 2006
+		mi.internalLogEvent.Data = fmt.Sprintf(message, a...)
+		// using writeOut() to skip counting the events, as we do not want to count the internal logs...
+		mi.writeToSplunkNoCounters(mi.internalLogEvent)
+	} else {
+		// XML-based logging has not yet been activated: using STDERR instead
+		mi.logMu.Lock()
+		defer mi.logMu.Unlock()
+		message = fmt.Sprintf(message, a...)
+		fmt.Fprintf(os.Stderr, "[%s] %s run_id=\"%s\" - %s\n", mi.StanzaName, level, mi.runID, message)
 	}
-	return err
+
 }
 
 // logPlain forces a plain-text write to STDERR. This is useful to force the log to appear within splunk's splunkd.log,
 // same as the ones indicating the start of the run.
-// For info related to the arguments, see Log()
-func (mi *ModularInput) logPlain(level string, message string, a ...interface{}) (err error) {
+// For info related to the arguments, see [Log]
+func (mi *ModularInput) logPlain(level string, message string, a ...interface{}) {
 	level = strings.ToUpper(level)
+	if level == "DEBUG" && !mi.debug {
+		// do not do anything if debug is not enabled
+		return
+	}
 	if level == "WARNING" {
 		// Typical error, just manage it...
 		level = "WARN"
 	}
-	if level != "DEBUG" && level != "INFO" && level != "WARN" && level != "ERROR" && level != "FATAL" {
-		fmt.Fprintf(os.Stderr, "ERROR - ModularInput.Log invoked with invalid level parameter. Accepted: DEBUG, INFO, WARN, ERROR, FATAL. Provided: '%s'\n", level)
-		return fmt.Errorf("ModularInput.Log: invalid value of 'level' provided. Accepted: DEBUG, INFO, WARN, ERROR, FATAL. Provided: '%s'", level)
-	}
-	// do not do anything if debug is not enabled
-	if level != "DEBUG" || (level == "DEBUG" && mi.debug) {
-		message = "ModularInput " + mi.StanzaName + ": " + level + " run_id=" + mi.runID + " - " + message + "\n"
-		_, err = fmt.Fprintf(os.Stderr, message, a...)
-	}
-	return err
+
+	// Locking is necesary to ensure nothing gets garbled up when multiple go-routines are running
+	mi.logMu.Lock()
+	defer mi.logMu.Unlock()
+	message = fmt.Sprintf(message, a...)
+	fmt.Fprintf(os.Stderr, "[%s] %s run_id=\"%s\" - %s\n", mi.StanzaName, level, mi.runID, message)
 }
 
 // WriteToSplunk outputs a generated event in the format accepted by Splunk
 // Returns the number of bytes written, an error if anything went wrong
-// This function IS NOT concurrency safe!
+// This function using locking to ensure it is concurrency safe.
 func (mi *ModularInput) WriteToSplunk(se *SplunkEvent) error {
+	if se == nil {
+		return errors.NewErrInvalidParam("writeToSplunk", nil, "'se' cannot be nil")
+	}
 	if xmlStr, err := se.xml(); err != nil {
 		return err
 	} else {
+		// Locking is necesary to ensure nothing gets garbled up when multiple go-routines are running
+		mi.logMu.Lock()
+		defer mi.logMu.Unlock()
 		// increase the counter of the generated events
 		mi.cntDataEventsGeneratedbyStanza++
 		mi.cntDataEventsGeneratedTotal++
@@ -341,60 +276,56 @@ func (mi *ModularInput) WriteToSplunk(se *SplunkEvent) error {
 	}
 }
 
+// writeToSplunkNoCounters is a private function which allows the modular input to skip counting the events emitted.
+//
+// Useful for internal logging, which does not count against the # of events generated by the input
+//
+// This function using locking to ensure it is concurrency safe.
+func (mi *ModularInput) writeToSplunkNoCounters(se *SplunkEvent) error {
+	if se == nil {
+		return errors.NewErrInvalidParam("writeToSplunk", nil, "'se' cannot be nil")
+	}
+	if xmlStr, err := se.xml(); err != nil {
+		return err
+	} else {
+		// Locking is necesary to ensure nothing gets garbled up when multiple go-routines are running
+		mi.logMu.Lock()
+		defer mi.logMu.Unlock()
+		_, err = os.Stdout.WriteString(xmlStr)
+		return err
+	}
+}
+
 // SetDefaultSourcetype configures a sourcetype to be used if none has been received from the run-time configurations.
 // Additionally, the default sourcetype is used when generating the template for default/inputs.conf
 func (mi *ModularInput) SetDefaultSourcetype(st string) {
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
 	mi.defaultSourcetype = st
 }
 
 // GetDefaultSourcetype returns the sourcetype used by the modular input to collect data
 // in case there are no specific run-time configurations
 func (mi *ModularInput) GetDefaultSourcetype() string {
+	mi.mu.RLock()
+	defer mi.mu.RUnlock()
 	return mi.defaultSourcetype
 }
 
 // SetDefaultIndex configures an index to be used if none has been received from the run-time configurations.
 // Additionally, the default index is used when generating the template for default/inputs.conf
 func (mi *ModularInput) SetDefaultIndex(idx string) {
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
 	mi.defaultIndex = idx
 }
 
 // GetDefaultIndex returns the index used by the modular input to collect data
 // in case there are no specific run-time configurations
 func (mi *ModularInput) GetDefaultIndex() string {
+	mi.mu.RLock()
+	defer mi.mu.RUnlock()
 	return mi.defaultIndex
-}
-
-// NewDefaultEvent provides a template for the SplunkEvent to be used to log actual data to be imported to Splunk
-func (mi *ModularInput) NewDefaultEvent(stanza *Stanza) (ev *SplunkEvent) {
-	if stanza != nil {
-		//mi.Log("DEBUG", fmt.Sprintf("NewDefaultEvent: stanza is NOT nil. %v", stanza.Params))
-		// NOT specifying Data intentionally
-
-		ev = &SplunkEvent{
-			// Anything can be overridded by the actual script
-			Time:       time.Now(),
-			Stanza:     stanza.Name,
-			SourceType: stanza.Sourcetype(),
-			Index:      stanza.Index(),
-			Host:       stanza.Host(),
-			Source:     stanza.Source(),
-			Unbroken:   false,
-			Done:       false,
-		}
-		if stanza.Sourcetype() == "" {
-			ev.SourceType = mi.defaultSourcetype
-		}
-	} else {
-		// If no configurations are present, we basically just return a generic event
-		ev = &SplunkEvent{
-			Time:       time.Now(),
-			SourceType: mi.defaultSourcetype,
-			Unbroken:   false,
-			Done:       false,
-		}
-	}
-	return ev
 }
 
 // printHelp prints command-line usage instructions to STDOUT
@@ -439,8 +370,9 @@ func (mi *ModularInput) Run(args []string, stdin io.Reader, stdout, stderr io.Wr
 
 		// Read XML configs from STDIN
 		// Populates infos about the configuration Stanzas
+		mi.Log("DEBUG", "Loading input configurations from STDIN")
 		if ic, err := getInputConfigFromXML(stdin); err != nil {
-			mi.Log("FATAL", "Errow when loading execution configuration XML from StdIn: %s", err.Error())
+			mi.Log("FATAL", "Errow when loading execution configuration XML from STDIN: %s", err.Error())
 			return err
 		} else {
 			mi.Log("DEBUG", "Loaded input configurations: %+v", ic)
@@ -539,12 +471,12 @@ func (mi *ModularInput) runStreaming() (err error) {
 	var duration time.Duration
 	mi.Log("DEBUG", "Starting 'runStreaming' function")
 	if !mi.useSingleInstance && mi.stream == nil {
-		mi.Log("FATAL", "No streaming function specified")
-		return fmt.Errorf("FATAL: no streaming function specified")
+		mi.Log("FATAL", "No streaming function specified for multi-instance mode.")
+		panic("FATAL: no streaming function specified for multi-instance mode")
 	}
 	if mi.useSingleInstance && mi.streamSingleInstance == nil {
 		mi.Log("FATAL", "No streaming function specified for single-instance mode")
-		return fmt.Errorf("FATAL: no streaming function specified for single-instance mode")
+		panic("FATAL: no streaming function specified for single-instance mode")
 	}
 
 	streamingStartTime := time.Now()
