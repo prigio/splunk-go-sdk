@@ -124,19 +124,21 @@ func (aa *AlertAction) RegisterParam(p *params.Param) error {
 
 // RegisterNewParam adds a new parameter to the alert action.
 // The argument is additionally returned for further processing, if needed.
+//
+// uiType must be one of "splunk-text-input", "splunk-text-area", "splunk-select", "splunk-radio-input", "splunk-color-picker"
 func (aa *AlertAction) RegisterNewParam(name, title, description, defaultValue, placeholder, uiType string, required bool) (*params.Param, error) {
 	var p *params.Param
 	var err error
 	// check if the parameter is already present
 	// return error in case it is already there
 	if _, err = aa.GetParam(name); err == nil {
-		return nil, errors.NewErrInvalidParam("registerNewPParam["+name+"]", nil, "'%s' already exists", name)
+		return nil, errors.NewErrInvalidParam("registerNewParam["+name+"]", nil, "'%s' already exists", name)
 	}
 	p, err = params.NewParam("alert_actions.conf", aa.StanzaName, name, title, description, defaultValue, required, false)
 	if err != nil {
 		return nil, fmt.Errorf("registerNewParam: %w", err)
 	}
-	p.SetCustomProperty("uiType", string(uiType))
+	p.SetCustomProperty("uiType", uiType)
 	p.SetCustomProperty("placeholder", placeholder)
 	if aa.params == nil {
 		aa.params = make([]*params.Param, 0, 1)

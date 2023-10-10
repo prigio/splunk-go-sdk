@@ -27,7 +27,7 @@ func (aa *AlertAction) registerLogger() error {
 	}
 
 	// initialize a logger to perform internal logging
-	aa.splunkdlogger = aa.splunkd.NewLogger("runId:"+aa.runID, 0, "_internal", "", fmt.Sprintf("Alert [%s] %s", aa.GetApp(), aa.GetSearchName()), aa.getLoggingSourcetype())
+	aa.splunkdlogger = aa.splunkd.NewLogger("runId="+aa.runID, 0, "_internal", "", fmt.Sprintf("Alert [%s] %s", aa.GetApp(), aa.GetSearchName()), aa.getLoggingSourcetype())
 	return nil
 }
 
@@ -73,9 +73,10 @@ func (aa *AlertAction) RegisterEndUserLogger(index, messagePrefix string) error 
 		return fmt.Errorf("alert action setEndUserLogger: index parameter cannot be emtpy")
 	}
 	sourcetype := "alertaction:" + aa.StanzaName
+	source := fmt.Sprintf("Alert [%s] %s", aa.GetApp(), aa.GetSearchName())
 	// initialize a logger to perform logging visible by the end user
-	aa.Log("INFO", "Will be logging results of execution for the end-user as index=\"%s\" sourcetype=\"%s\"", index, sourcetype)
-	aa.endUserLogger = aa.splunkd.NewLogger(messagePrefix, 0, index, "", fmt.Sprintf("Alert [%s] %s", aa.GetApp(), aa.GetSearchName()), sourcetype)
+	aa.Log("INFO", `Will be logging results of execution for the end-user as index="%s" sourcetype="%s" source="%s"`, index, sourcetype, source)
+	aa.endUserLogger = aa.splunkd.NewLogger(messagePrefix, 0, index, "", source, sourcetype)
 	return nil
 }
 
@@ -87,6 +88,24 @@ func (aa *AlertAction) RegisterEndUserLogger(index, messagePrefix string) error 
 func (aa *AlertAction) LogForEndUser(level string, message string, a ...interface{}) {
 	if aa.endUserLogger == nil {
 		panic("logForEndUser: logger available. Use RegisterEndUserLogger to initialize a logger when a runtime config is available")
+	}
+	level = strings.ToUpper(level)
+	message = fmt.Sprintf("%s %s - %s\n",
+		time.Now().Round(time.Millisecond).Format("2006-01-02T15:04:05.000-0700"),
+		level,
+		message)
+
+	aa.endUserLogger.Printf(message, a...)
+}
+
+// LogForEndUserIfEnabled writes a log to an index visible for the end-user of the alert in order to report on
+// the alert execution.
+// In case [RegisterEndUserLogger] had not been used to configure the logging output, this method silently does nothing.
+//
+// Argument 'message' can use formatting markers as fmt.Sprintf. Aditional arguments 'a' will be provided to fmt.Sprintf
+func (aa *AlertAction) LogForEndUserIfEnabled(level string, message string, a ...interface{}) {
+	if aa.endUserLogger == nil {
+		return
 	}
 	level = strings.ToUpper(level)
 	message = fmt.Sprintf("%s %s - %s\n",
