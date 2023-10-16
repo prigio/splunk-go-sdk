@@ -110,8 +110,7 @@ func New(stanzaName, label, description string) (*ModularInput, error) {
 func (mi *ModularInput) RegisterStreamingFunc(f StreamingFunc) {
 	mi.mu.Lock()
 	defer mi.mu.Unlock()
-
-	mi.Log("INFO", "Activating multi-instance execution mode and registering necessary function")
+	mi.Log("DEBUG", "Activating multi-instance execution mode and registering necessary function")
 	if mi.streamSingleInstance != nil {
 		mi.Log("WARN", "De-registering streaming function for single-instance mode, as multi-instance mode has been activated")
 		mi.streamSingleInstance = nil
@@ -122,14 +121,13 @@ func (mi *ModularInput) RegisterStreamingFunc(f StreamingFunc) {
 
 // RegisterStreamingFunc registera a streaming function to be executed on one configuration stanza which is provided by Splunk at run time
 func (mi *ModularInput) RegisterStreamingFuncSingleInstance(f StreamingFuncSingleInstance) {
-	mi.Log("INFO", "Activating single-instance execution mode and registering necessary function")
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+	mi.Log("DEBUG", "Activating single-instance execution mode and registering necessary function")
 	if mi.stream != nil {
 		mi.Log("WARN", "De-registering streaming function for multi-instance mode, as single-instance mode has been activated")
 		mi.stream = nil
 	}
-
-	mi.mu.Lock()
-	defer mi.mu.Unlock()
 	mi.useSingleInstance = true
 	mi.streamSingleInstance = f
 }
