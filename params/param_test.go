@@ -1,7 +1,11 @@
 package params
 
 import (
+	"os"
+	"strings"
 	"testing"
+
+	"github.com/prigio/splunk-go-sdk/v2/splunkd"
 )
 
 func TestParamValues(t *testing.T) {
@@ -82,11 +86,43 @@ func TestParamAcceptableValues(t *testing.T) {
 		t.Error("SetValue returned an error when provided with an acceptable value")
 	}
 
-	if err := p.AddChoice("c1", "this should raise an error"); err == nil {
-		t.Error("AddChoice did not return an when adding a duplicated choice")
+	if err := p.AddChoice("c1", "this should not raise an error"); err != nil {
+		t.Error("AddChoice did return an error when adding a duplicated choice, instead of silently overwriting it")
 	}
 	if len(p.GetChoices()) != 3 {
 		t.Errorf("GetChoiceValues returned the wrong number of choices. Expected=%v, Actual=%v. Contents: %v", 3, len(p.GetChoices()), p.GetChoices())
 	}
+}
 
+func TestEnvVars(t *testing.T) {
+	os.Setenv("SPLUNK_HOME", "/opt/splunk")
+	ss := mustLoginToSplunk(t, "https://localhost:8089", "admin", "splunked")
+	p, _ := NewParam("server.conf", "sslConfig", "serverCert", "serverCert", "", "", false, false)
+
+	val, err := p.GetValue(ss)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+	//the value of the setting by default is: $SPLUNK_HOME/etc/auth/server.pem
+	if strings.HasPrefix(val, "/etc/auth/") {
+		t.Errorf("Wrong value of parameter: '%s'. Expected: '%s' (with substituted ENV variable), found '%s'", p.String(), "$SPLUNK_HOME/etc/auth/server.pem", val)
+	}
+}
+
+// mustLoginToSplunk performs a username+password login on splunk and returns a *Client instance to it.
+// If login is not successful, the test t is interrrupted.
+func mustLoginToSplunk(t *testing.T, endpoint, user, password string) *splunkd.Client {
+	t.Log("INFO Connecting to Splunk")
+	ss, err := splunkd.New(endpoint, true, "")
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+		return nil
+	}
+	if err = ss.Login(user, password, ""); err != nil {
+		t.Error("Client can not perform login with username and password")
+		t.FailNow()
+		return nil
+	}
+	return ss
 }
